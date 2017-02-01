@@ -1,0 +1,43 @@
+clone:
+      tags: true
+
+build:
+  pretest:
+    image: dock.pw.fr/pw/python:$$PYTHON_VERSION
+    commands:
+      - pip install -q -e . 
+      - pip install -q flake8 coverage coverage-badge
+      - echo "****** Tests de code *****"
+      - flake8 setup.py lib/wgap
+  bundle:
+    image: dock.pw.fr/pw/debpkg:$$DEBIAN_VERSION
+    commands:
+      - dpkg-buildpackage -b
+      - fakeroot debian/rules clean
+  test:
+    image: dock.pw.fr/pw/python:$$PYTHON_VERSION
+    commands:
+      - echo "****** Tests fonctionnels *****"
+
+publish:
+  sftp:
+    host: pippin.planet-work.net
+    username: pkg
+    files:
+      - ../*.deb
+    destination_path: incoming/wgap/$$DEBIAN_VERSION
+    when:
+      event: tag
+  ssh:
+    host: pippin.planet-work.net
+    user: pkg
+    commands:
+      - aptly repo add debian-$$DEBIAN_VERSION incoming/wgap/$$DEBIAN_VERSION && aptly publish update $$DEBIAN_VERSION debian 
+    when:
+      event: tag
+
+matrix:
+  PYTHON_VERSION:
+    - 3.4
+  DEBIAN_VERSION:
+    - jessie

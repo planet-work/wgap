@@ -6,7 +6,7 @@ until the logger is started.
 """
 from __future__ import absolute_import
 
-from logging import getLogger
+# from logging import getLogger
 from logging import Formatter
 from logging import Logger
 from logging import NullHandler
@@ -33,7 +33,7 @@ class _Logger(Logger):
         # With a NullHandler, client code may make logging calls without regard
         # to whether the logger has been started yet. The standard Logger API
         # may be used to add and remove additional handlers, but the
-        # NullHandler should always be left in place. 
+        # NullHandler should always be left in place.
         super(_Logger, self).__init__(name or __name__.split(".")[0])
         self.addHandler(NullHandler())  # default to no output
         self.active = False

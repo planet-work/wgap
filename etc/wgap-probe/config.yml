@@ -1,0 +1,7 @@
+# Runtime configuration for the wgap application.
+collector:
+    address: 127.0.0.1:6201
+
+filter:
+    uid_min: 1000
+   

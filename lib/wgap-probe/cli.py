@@ -20,12 +20,16 @@ def _cmdline(argv=None):
 
     """
     parser = ArgumentParser()
-    parser.add_argument("-c", "--config", action="append",
+    parser.add_argument(
+            "-c", "--config",
+            action="append",
             help="config file [etc/config.yml]")
-    parser.add_argument("-v", "--version", action="version",
+    parser.add_argument(
+            "-v", "--version", action="version",
             version="wgap {:s}".format(__version__),
             help="print version and exit")
-    parser.add_argument("-w", "--warn", default="WARNING",
+    parser.add_argument(
+            "-w", "--warn", default="WARNING",
             help="logger warning level [WARNING]")
     subparsers = parser.add_subparsers(title="commands")
     cmd1_parser = subparsers.add_parser("cmd1")
@@ -53,7 +57,7 @@ def main(argv=None):
     args.command(**vars(args))
     logger.info("successful completion")
     return 0
- 
+
 
 # Make the module executable.
 

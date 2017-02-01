@@ -1,0 +1,2 @@
+etc/wgap-probe/*
+debian/python3-wgap-probe/usr/lib/python3/dist-packages/wgap-probe/*
