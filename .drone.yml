@@ -16,9 +16,15 @@ build:
       - dpkg-buildpackage -b
       - fakeroot debian/rules clean
   test:
-    image: dock.pw.fr/pw/python:$$PYTHON_VERSION
+    image: dock.pw.fr/pw/apache-php:jessie
     commands:
       - echo "****** Tests fonctionnels *****"
+      - uname -a 
+      - apt-get update >/dev/null
+      - apt-get install python3-yaml python3-pkg-resources python-bcc
+      - dpkg -i ../*deb
+      - dpkg -c ../wgap-probe*deb
+      - /usr/bin/wgap-probe test
 
 publish:
   sftp:
