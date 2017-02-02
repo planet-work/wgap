@@ -22,6 +22,7 @@ build:
       - uname -a 
       - apt-get update >/dev/null
       - apt-get install python3-yaml python3-pkg-resources python-bcc
+      - apt-get install -y linux-headers-`uname -r` linux-image-`uname -r`
       - dpkg -i ../*deb
       - dpkg -c ../wgap-probe*deb
       - /usr/bin/wgap-probe test
