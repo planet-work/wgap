@@ -12,7 +12,7 @@ build:
   bundle:
     image: dock.pw.fr/pw/debpkg:$$DEBIAN_VERSION
     commands:
-      - apt-get install -y dh-systemd python3-setuptools
+      - apt-get install -y dh-systemd python3-setuptools python3-yaml
       - dpkg-buildpackage -b
       - fakeroot debian/rules clean
   test:

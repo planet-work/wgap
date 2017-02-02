@@ -2,13 +2,13 @@ Source: wgap
 Section: admin
 Priority: optional
 Maintainer: Frédéric VANNIÈRE <f.vanniere@planet-work.com>
-Build-Depends: debhelper (>= 9), dh-python, python-all, python-setuptools
+Build-Depends: debhelper (>= 9), dh-python, python-all, python3-setuptools, dh-systemd
 Standards-Version: 3.9.5
 Homepage: https://www.planet-work.com
 
 Package: wgap-probe
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, ${python3:Depends}, python-bcc
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${python3:Depends}, python-bcc, python3-yaml
 Description: Webserver suspicious activity probe
 
 Package: wgap-collector

@@ -1,12 +1,10 @@
 #!/usr/bin/python3
-# EASY-INSTALL-ENTRY-SCRIPT: 'wgap-probe==0.1.0.dev0','console_scripts','wgap-probe'
-__requires__ = 'wgap-probe==0.1.0.dev0'
 import re
 import sys
-from pkg_resources import load_entry_point
+import wgap_probe.cli
 
 if __name__ == '__main__':
     sys.argv[0] = re.sub(r'(-script\.pyw?|\.exe)?$', '', sys.argv[0])
     sys.exit(
-        load_entry_point('wgap-probe==0.1.0.dev0', 'console_scripts', 'wgap-probe')()
+        wgap_probe.cli.main()
     )
