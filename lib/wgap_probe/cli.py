@@ -21,12 +21,11 @@ def _cmdline(argv=None):
     """
     parser = ArgumentParser()
     parser.add_argument(
-            "-c", "--config",
-            action="append",
-            help="config file [etc/config.yml]")
+            "-c", "--config", action="append",
+            help="config file [/etc/wgap-probe/config.yml]")
     parser.add_argument(
             "-v", "--version", action="version",
-            version="wgap {:s}".format(__version__),
+            version="wgap {:s}".format(__version__.__version__),
             help="print version and exit")
     parser.add_argument(
             "-w", "--warn", default="WARNING",
@@ -40,7 +39,9 @@ def _cmdline(argv=None):
     if not args.config:
         # Don't specify this as an argument default or else it will always be
         # included in the list.
-        args.config = ["etc/config.yml"]
+        args.config = ["/etc/wgap-probe/config.yml"]
+    # if not args.command:
+    #     args.command = 'cmd1'
     return args
 
 

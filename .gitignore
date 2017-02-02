@@ -3,6 +3,9 @@
 MANIFEST
 build/
 dist/
+.pybuild/
+.ropeproject/
+debian/debhelper-build-stamp
 *.egg-info/
 *.pyc
 *.pyo

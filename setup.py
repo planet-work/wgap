@@ -26,14 +26,14 @@ def _listdir(root):
 _DATA = "etc/",
 
 _CONFIG = {
-    "name": "wgap-probe",
+    "name": "wgap_probe",
     "author": "Frédéric VANNIÈRE",
     "author_email": "f.vanniere@planet-work.com",
     "url": "",
     "package_dir": {"": "lib"},
     "packages": find_packages("lib"),
     "entry_points": {
-        "console_scripts": ("wgap-probe = wgap.cli:main",),
+        "console_scripts": ("wgap-probe = wgap_probe.cli:main",),
     },
     "data_files": list(chain.from_iterable(_listdir(root) for root in _DATA))
 }

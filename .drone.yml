@@ -8,10 +8,11 @@ build:
       - pip install -q -e . 
       - pip install -q flake8 coverage coverage-badge
       - echo "****** Tests de code *****"
-      - flake8 setup.py lib/wgap
+      - flake8 setup.py lib/wgap_probe
   bundle:
     image: dock.pw.fr/pw/debpkg:$$DEBIAN_VERSION
     commands:
+      - apt-get install -y dh-systemd python3-setuptools
       - dpkg-buildpackage -b
       - fakeroot debian/rules clean
   test:
