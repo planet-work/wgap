@@ -6,8 +6,8 @@ from __future__ import absolute_import
 from argparse import ArgumentParser
 
 from . import __version__
-from .api import cmd1
-from .api import cmd2
+from .api import run
+from .api import test
 from .core import config
 from .core import logger
 
@@ -27,21 +27,24 @@ def _cmdline(argv=None):
             "-v", "--version", action="version",
             version="wgap {:s}".format(__version__.__version__),
             help="print version and exit")
+    # parser.add_argument(
+    #         "-d", "--debug", default="DEBUG",
+    #        help="logger debug level [DEBUG]")
     parser.add_argument(
             "-w", "--warn", default="WARNING",
             help="logger warning level [WARNING]")
     subparsers = parser.add_subparsers(title="commands")
-    cmd1_parser = subparsers.add_parser("cmd1")
-    cmd1_parser.set_defaults(command=cmd1)
-    cmd2_parser = subparsers.add_parser("cmd2")
-    cmd2_parser.set_defaults(command=cmd2)
+    run_parser = subparsers.add_parser("run")
+    run_parser.set_defaults(command=run)
+    test_parser = subparsers.add_parser("test")
+    test_parser.set_defaults(command=test)
     args = parser.parse_args(argv)
     if not args.config:
         # Don't specify this as an argument default or else it will always be
         # included in the list.
         args.config = ["/etc/wgap-probe/config.yml"]
     # if not args.command:
-    #     args.command = 'cmd1'
+    #     args.command = 'run'
     return args
 
 

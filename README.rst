@@ -1,6 +1,6 @@
-====
-WGAP
-====
+=============================
+WGAP : Webserver Gets a Probe
+=============================
 
 **Auditing probe for webservers**
 
@@ -16,7 +16,7 @@ Minimum Requirements
 * Linux 4.6+
 * Kernels image and headers (``linux-image-`` and ``linux-headers-``)
 * Libbcc and python-bcc from https://github.com/iovisor/bcc
-* Python 2.7
+* Python 3.4
 
 
 Optional Requirements
