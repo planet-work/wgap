@@ -27,7 +27,7 @@ build:
       - apt-get install -o Dpkg::Options::="--force-confnew" -y linux-headers-`uname -r` linux-image-`uname -r`
       - dpkg -i ../*deb
       - dpkg -c ../wgap-probe*deb
-      - sleep 200
+      - sleep 2
       - mount -t debugfs debugfs /sys/kernel/debug
       - mount -t tracefs tracefs /sys/kernel/debug/tracing
       - echo "*** TEST DESACTIVES ***** /usr/bin/wgap-probe test"
