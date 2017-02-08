@@ -58,6 +58,10 @@ def main(argv=None):
     logger.start(args.warn)
     logger.info("starting execution")
     config.load(args.config)
+    try:
+        logger.setLevel(config.loglevel)
+    except KeyError:
+        pass
     args.command(**vars(args))
     logger.info("successful completion")
     return 0

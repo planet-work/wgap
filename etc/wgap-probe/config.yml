@@ -1,5 +1,9 @@
 # Runtime configuration for the wgap application.
 
+# Installs kernel headers with apt : apt-get install -y linux-headers-`uname -r` linux-image-`uname -r`
+autoinstall_headers: True
+loglevel: DEBUG
+
 input:
     - file_write
     - file_read
