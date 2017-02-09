@@ -14,7 +14,6 @@ import pprint
 # import yaml
 
 UID_CACHE = {}
-INTERVAL = 1
 
 
 class Event:
@@ -90,22 +89,24 @@ def main(**kwargs):
     # Attach probe to configured entries
     logger.debug("Attach probe to %s" % ','.join(config.input))
     if 'file_read' in config.input:
+        logger.debug("Attaching __vfs_read")
         b.attach_kprobe(event="__vfs_read", fn_name="trace_read_entry")
     if 'file_write' in config.input:
+        logger.debug("Attaching __vfs_write")
         b.attach_kprobe(event="__vfs_write", fn_name="trace_write_entry")
 
-    exiting = 0
     # Main loop
-    logger.debug("Starting main loop every %i seconds" % INTERVAL)
+    logger.debug("Starting main loop every %i seconds" % config.poll_interval)
+    exiting = 0
     while 1:
         try:
-            sleep(INTERVAL)
+            sleep(config.poll_interval)
         except KeyboardInterrupt:
             exiting = 1
 
-        counts = b.get_table("counts")
+        counts = b.get_table("fileops")
 
-        continue
+        print(dir(counts))
         for k, v in reversed(sorted(counts.items(),
                                     key=lambda counts: counts[1].rbytes)):
             evt = Event()
@@ -117,6 +118,10 @@ def main(**kwargs):
                 continue
             evt.pid = int(k.pid)
             evt.username = k.user
+            print("="*60)
+            print(repr(k.type))
+            print(type(k.type))
+            print("="*60)
             evt.type = k.type
             evt.filename = k.name.decode('utf-8')
             evt.uid = int(k.uid)
@@ -124,8 +129,12 @@ def main(**kwargs):
             # evt.gid = k.gid
             send_output(evt)
 
+            # 1 event for DEBUG
+            logger.error("TEST MODE STOPPING!")
+            exiting = 1
+
         if exiting:
-            print("Detaching...")
+            logger.debug("Detaching...")
             exit()
 
     return 0

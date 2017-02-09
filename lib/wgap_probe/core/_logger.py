@@ -11,6 +11,7 @@ from logging import Formatter
 from logging import Logger
 from logging import NullHandler
 from logging import StreamHandler
+from colorlog import ColoredFormatter
 
 
 __all__ = "logger",
@@ -59,8 +60,23 @@ class _Logger(Logger):
         """
         if self.active:
             return
+        formatter = ColoredFormatter(
+                         "%(log_color)s%(levelname)-8s%(reset)s %(message)s",
+                         datefmt=None,
+                         reset=True,
+                         log_colors={
+                            'DEBUG':    'cyan',
+                            'INFO':     'green',
+                            'WARNING':  'yellow',
+                            'ERROR':    'red',
+                            'CRITICAL': 'red,bg_white',
+                         },
+                         style='%')
         handler = StreamHandler()  # stderr
-        handler.setFormatter(Formatter(self.LOGFMT))
+        if False:
+            handler.setFormatter(Formatter(self.LOGFMT))
+        else:
+            handler.setFormatter(formatter)
         self.addHandler(handler)
         self.setLevel(level.upper())
         self.active = True

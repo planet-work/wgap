@@ -2,7 +2,11 @@
 
 # Installs kernel headers with apt : apt-get install -y linux-headers-`uname -r` linux-image-`uname -r`
 autoinstall_headers: True
+
 loglevel: DEBUG
+
+# polling interval (seconds)
+poll_interval: 1
 
 input:
     - file_write

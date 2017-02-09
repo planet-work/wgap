@@ -11,8 +11,8 @@ struct info_t {
     char comm[TASK_COMM_LEN];
     // de->d_name.name may point to de->d_iname so limit len accordingly
     char name[DNAME_INLINE_LEN];
-    //char directory[1024];
     char type;
+	char fname[DNAME_INLINE_LEN];
 };
 
 // the value of the output summary
@@ -23,7 +23,7 @@ struct val_t {
     u64 wbytes;
 };
 
-BPF_HASH(counts, struct info_t, struct val_t);
+BPF_HASH(fileops, struct info_t, struct val_t);
 
 static int do_entry(struct pt_regs *ctx, struct file *file,
     char __user *buf, size_t count, int is_read)
@@ -46,7 +46,7 @@ static int do_entry(struct pt_regs *ctx, struct file *file,
     //if (de->d_name.len == 0)
     //    return 0;
 
-    // store counts and sizes by pid & file
+    // store fileops and sizes by pid & file
     struct info_t info = {.pid = pid};
     bpf_get_current_comm(&info.comm, sizeof(info.comm));
     info.name_len = de->d_name.len;
@@ -54,7 +54,8 @@ static int do_entry(struct pt_regs *ctx, struct file *file,
     info.uid = uid;
 
     struct val_t *valp, zero = {};
-    valp = counts.lookup_or_init(&info, &zero);
+    valp = fileops.lookup_or_init(&info, &zero);
+	info.type = '?';
     if (is_read) {
         info.type = 'R';
         valp->reads++;
@@ -82,7 +83,7 @@ int trace_read_entry(struct pt_regs *ctx, struct file *file,
 
 
 BPF_HASH(currsock, u32, struct sock *);
-
+/*
 int kprobe__tcp_v4_connect(struct pt_regs *ctx, struct sock *sk)
 {
         u32 pid = bpf_get_current_pid_tgid();
@@ -126,4 +127,5 @@ int kretprobe__tcp_v4_connect(struct pt_regs *ctx)
 
         return 0;
 }
+*/
 
