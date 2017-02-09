@@ -34,7 +34,6 @@ class Event:
         d['remote_ip'] = ''
 
 
-
 def get_username(uid):
     if uid in UID_CACHE:
         return UID_CACHE[uid]
