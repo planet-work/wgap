@@ -12,7 +12,7 @@ build:
   bundle:
     image: dock.pw.fr/pw/debpkg:$$DEBIAN_VERSION
     commands:
-      - apt-get install -y dh-systemd python3-setuptools python3-yaml
+      - apt-get install -y dh-systemd python3-setuptools python3-yaml python3-colorlog
       - dpkg-buildpackage -b
       - fakeroot debian/rules clean
   test:
@@ -22,7 +22,7 @@ build:
       - echo "****** Tests fonctionnels *****"
       - uname -a 
       - apt-get update >/dev/null
-      - apt-get install python3-yaml python3-pkg-resources python-bcc kernel-common
+      - apt-get install python3-yaml python3-pkg-resources python-bcc kernel-common python3-colorlog
       - mv -f /etc/kernel-img.conf.ucf-new /etc/kernel-img.conf
       - apt-get install -o Dpkg::Options::="--force-confnew" -y linux-headers-`uname -r` linux-image-`uname -r`
       - dpkg -i ../*deb
