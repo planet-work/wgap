@@ -12,7 +12,10 @@ struct info_t {
     // de->d_name.name may point to de->d_iname so limit len accordingly
     char name[DNAME_INLINE_LEN];
     char type;
-	char fname[DNAME_INLINE_LEN];
+	int optype;
+	char parent[128];
+	u32 directory_len;
+    unsigned long inode;
 };
 
 // the value of the output summary
@@ -28,6 +31,12 @@ BPF_HASH(fileops, struct info_t, struct val_t);
 static int do_entry(struct pt_regs *ctx, struct file *file,
     char __user *buf, size_t count, int is_read)
 {
+	struct task_struct *task; 
+    struct dentry *tmp_de;
+
+	char buffer[128];
+    int buff_start = 0;
+
     u32 tgid = bpf_get_current_pid_tgid() >> 32;
     u32 gid = bpf_get_current_uid_gid() >> 32;
     u32 uid = (unsigned)(bpf_get_current_uid_gid() & 0xffffffff);
@@ -43,25 +52,63 @@ static int do_entry(struct pt_regs *ctx, struct file *file,
     // skip I/O lacking a filename
     struct dentry *de = file->f_path.dentry;
     int mode = file->f_inode->i_mode;
-    //if (de->d_name.len == 0)
-    //    return 0;
+    if (de->d_name.len == 0 || !S_ISREG(mode))
+        return 0;
 
     // store fileops and sizes by pid & file
     struct info_t info = {.pid = pid};
-    bpf_get_current_comm(&info.comm, sizeof(info.comm));
-    info.name_len = de->d_name.len;
     bpf_probe_read(&info.name, sizeof(info.name), (void *)de->d_name.name);
+	//info.fp = file->f_path;
+	
+	tmp_de = de->d_parent;
+   	bpf_probe_read(&buffer, 128, (void *) tmp_de->d_name.name);
+	int i;
+	for(i = 0; i< sizeof(info.parent); i++) {
+          info.parent[i+buff_start] = buffer[i];
+	}
+
+	//info.parent[i+buff_start+1] = '/';
+	//info.parent[i+buff_start+2] = 0;
+    
+
+//	while (de) {
+//		de = de->d_parent;
+		/*
+    	struct dentry *parent = de->d_parent;
+   	    bpf_probe_read(&buffer, sizeof(info.parent), (void *) de->d_parent->d_name.name);
+
+	    for(int i = 0; i< sizeof(info.parent); i++) {
+            info.parent[i+buff_start] = buffer[i];
+	    }
+		tmp_de = tmp_de->d_parent;
+		*/
+//	}
+
+	info.inode = file->f_inode->i_ino;
+
+    bpf_get_current_comm(&info.comm, sizeof(info.comm));
+	task = (struct task_struct *)bpf_get_current_task(); 
+
+
+    info.name_len = de->d_name.len;
     info.uid = uid;
+    if (is_read) {
+        info.type = 'R';
+	} else {
+        info.type = 'W';
+	}
 
     struct val_t *valp, zero = {};
     valp = fileops.lookup_or_init(&info, &zero);
-	info.type = '?';
+	info.optype = 12;
     if (is_read) {
         info.type = 'R';
+		info.optype = 1;
         valp->reads++;
         valp->rbytes += count;
     } else {
         info.type = 'W';
+		info.optype = 2;
         valp->writes++;
         valp->wbytes += count;
     }

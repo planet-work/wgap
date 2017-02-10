@@ -24,7 +24,9 @@ class Event:
         d['gid'] = 0
         d['username'] = ''
         d['groupname'] = ''
-        d['filename'] = ''
+        d['file_name'] = ''
+        d['file_inodenum'] = 0
+        d['file_parentdir'] = ''
         d['progname'] = ''
         d['event'] = ''
         d['path'] = ''
@@ -42,7 +44,7 @@ def get_username(uid):
 
 
 def send_output(data):
-    print("~"*100)
+    print("~"*80)
     # j = json.dumps(data.__dict__)
     if 'console' in config.output:
         pprint.pprint(data.__dict__)
@@ -118,12 +120,10 @@ def main(**kwargs):
                 continue
             evt.pid = int(k.pid)
             evt.username = k.user
-            print("="*60)
-            print(repr(k.type))
-            print(type(k.type))
-            print("="*60)
-            evt.type = k.type
-            evt.filename = k.name.decode('utf-8')
+            evt.type = '%1s' % k.type.decode('utf-8')
+            evt.file_name = k.name.decode('utf-8')
+            evt.file_parentdir = k.parent.decode('utf-8')
+            evt.file_inodenum = int(k.inode)
             evt.uid = int(k.uid)
             evt.progname = k.comm.decode('utf-8')
             # evt.gid = k.gid
