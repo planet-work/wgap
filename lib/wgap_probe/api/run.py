@@ -87,13 +87,11 @@ def main(**kwargs):
     logger.debug("Execution run command")
 
     logger.debug("Check for kernel headers")
-    kernel_version = platform.uname().release
-    header_check = '/lib/modules/%s/build/include/linux/bpf.h' % kernel_version
+    kernel_v = platform.uname().release
+    header_check = '/lib/modules/%s/build/include/linux/bpf.h' % kernel_v
     if not os.path.exists(header_check):
-        logger.warning("No Kernel neaders found for %s" % kernel_version)
-        pkgs = [
-                 'linux-headers-%s' % kernel_version,
-                 'linux-image-%s' % kernel_version]
+        logger.warning("No Kernel neaders found for %s" % kernel_v)
+        pkgs = ['linux-headers-%s' % kernel_v, 'linux-image-%s' % kernel_v]
         if config.autoinstall_headers:
             logger.info("Installing packages ...")
             p = Popen(['apt-get', 'update'], stdout=PIPE)
@@ -103,7 +101,6 @@ def main(**kwargs):
 
         else:
             logger.error("Please run  apt-get install -y %s" % ' '.join(pkgs))
-
 
     logger.debug("Generates BPF probe")
     bpf_text = create_bpf_probe()
@@ -143,7 +140,13 @@ def main(**kwargs):
             evt.username = k.user
             evt.type = '%1s' % k.type.decode('utf-8')
             evt.file_name = k.name.decode('utf-8')
-            evt.file_parentdir = k.parent.decode('utf-8')
+            parents = [k.parent1.decode('utf-8'),
+                       k.parent2.decode('utf-8'),
+                       k.parent3.decode('utf-8'),
+                       k.parent4.decode('utf-8')]
+            parents = list(filter(None, parents))
+            parents.reverse()
+            evt.file_parentdir = '/'.join(parents).replace('//', '/')
             evt.file_inodenum = int(k.inode)
             evt.uid = int(k.uid)
             evt.progname = k.comm.decode('utf-8')

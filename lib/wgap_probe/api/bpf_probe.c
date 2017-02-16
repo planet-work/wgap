@@ -13,7 +13,10 @@ struct info_t {
     char name[DNAME_INLINE_LEN];
     char type;
 	int optype;
-	char parent[128];
+	char parent1[32];
+	char parent2[32];
+	char parent3[32];
+	char parent4[32];
 	u32 directory_len;
     unsigned long inode;
 };
@@ -34,7 +37,7 @@ static int do_entry(struct pt_regs *ctx, struct file *file,
 	struct task_struct *task; 
     struct dentry *tmp_de;
 
-	char buffer[128];
+	char buffer[32];
     int buff_start = 0;
 
     u32 tgid = bpf_get_current_pid_tgid() >> 32;
@@ -61,11 +64,43 @@ static int do_entry(struct pt_regs *ctx, struct file *file,
 	//info.fp = file->f_path;
 	
 	tmp_de = de->d_parent;
-   	bpf_probe_read(&buffer, 128, (void *) tmp_de->d_name.name);
+   	bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
+	int i;
+	for(i = 0; i< sizeof(info.parent1); i++) {
+          info.parent1[i+buff_start] = buffer[i];
+	}
+  
+	if (tmp_de->d_parent != NULL) {
+    	tmp_de = tmp_de->d_parent;
+   	    bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
+	    for(i = 0; i< sizeof(info.parent2); i++) {
+              info.parent2[i+buff_start] = buffer[i];
+	    }
+	}
+/*
+	if (tmp_de->d_parent != NULL) {
+    	tmp_de = tmp_de->d_parent;
+   	    bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
+	    for(i = 0; i< sizeof(info.parent3); i++) {
+              info.parent3[i+buff_start] = buffer[i];
+	    }
+	}
+
+	if (tmp_de->d_parent != NULL) {
+    	tmp_de = tmp_de->d_parent;
+   	    bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
+	    for(i = 0; i< sizeof(info.parent4); i++) {
+              info.parent4[i+buff_start] = buffer[i];
+	    }
+	}*/
+
+	/*
+	tmp_de = tmp_de->d_parent;
+   	bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
 	int i;
 	for(i = 0; i< sizeof(info.parent); i++) {
-          info.parent[i+buff_start] = buffer[i];
-	}
+          info.parent2[i+buff_start] = buffer[i];
+	}*/
 
 	//info.parent[i+buff_start+1] = '/';
 	//info.parent[i+buff_start+2] = 0;
