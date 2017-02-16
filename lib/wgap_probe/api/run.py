@@ -5,6 +5,8 @@ from __future__ import absolute_import
 
 import os
 import pwd
+import platform
+from subprocess import Popen, PIPE
 from time import sleep
 from ..core import logger
 from ..core import config
@@ -83,6 +85,25 @@ def main(**kwargs):
     """
     # Using kwargs to provide a generic interface across all commands.
     logger.debug("Execution run command")
+
+    logger.debug("Check for kernel headers")
+    kernel_version = platform.uname().release
+    header_check = '/lib/modules/%s/build/include/linux/bpf.h' % kernel_version
+    if not os.path.exists(header_check):
+        logger.warning("No Kernel neaders found for %s" % kernel_version)
+        pkgs = [
+                 'linux-headers-%s' % kernel_version,
+                 'linux-image-%s' % kernel_version]
+        if config.autoinstall_headers:
+            logger.info("Installing packages ...")
+            p = Popen(['apt-get', 'update'], stdout=PIPE)
+            os.waitpid(p.pid, 0)
+            p = Popen(['apt-get', 'install', '-y', pkgs[0], pkgs[1]])
+            os.waitpid(p.pid, 0)
+
+        else:
+            logger.error("Please run  apt-get install -y %s" % ' '.join(pkgs))
+
 
     logger.debug("Generates BPF probe")
     bpf_text = create_bpf_probe()
