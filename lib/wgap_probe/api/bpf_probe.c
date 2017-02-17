@@ -4,33 +4,98 @@
 #include <bcc/proto.h>
 
 // the key for the output summary
-struct info_t {
-    u32 pid;
+struct val_t {
+	u64 id;
+	u64 ts;
     u32 uid;
+    u32 gid;
     u32 name_len;
     char comm[TASK_COMM_LEN];
     // de->d_name.name may point to de->d_iname so limit len accordingly
+	const char *fname;
     char name[64];
     char type;
 	int optype;
-	char parent1[32];
+	/*char parent1[32];
 	char parent2[32];
 	char parent3[32];
 	char parent4[32];
 	u32 directory_len;
-    unsigned long inode;
+    unsigned long inode; */
 };
 
 // the value of the output summary
-struct val_t {
-    u64 reads;
-    u64 writes;
-    u64 rbytes;
-    u64 wbytes;
+struct data_t {
+    u64 id;
+    u64 ts;
+	int ret;
+    u32 pid;
+    u32 uid;
+	char comm[TASK_COMM_LEN]; 
+    char fname[NAME_MAX]; 
 };
 
-BPF_HASH(fileops, struct info_t, struct val_t);
+BPF_HASH(infotmp, u64, struct val_t);
+BPF_PERF_OUTPUT(events);
 
+
+int trace_sys_open_entry(struct pt_regs *ctx, const char __user *filename)
+{
+    struct val_t val = {};
+    u64 id = bpf_get_current_pid_tgid();
+    u32 pid = id >> 32; // PID is higher part
+    u32 tid = id;       // Cast and get the lower part
+
+    u32 tgid = bpf_get_current_pid_tgid() >> 32;
+    u32 uid = (unsigned)(bpf_get_current_uid_gid() & 0xffffffff);
+    u32 gid = bpf_get_current_uid_gid() >> 32;
+
+    if (TGID_FILTER)
+        return 0;
+    if (GID_FILTER)
+        return 0;
+    if (UID_FILTER)
+        return 0;
+
+    if (bpf_get_current_comm(&val.comm, sizeof(val.comm)) == 0) {
+        val.id = id;
+        val.ts = bpf_ktime_get_ns();
+        val.fname = filename;
+        val.uid = uid;
+        infotmp.update(&id, &val);
+    }
+
+    return 0;
+}
+
+int trace_sys_open_return(struct pt_regs *ctx)
+{
+    u64 id = bpf_get_current_pid_tgid();
+    struct val_t *valp;
+    struct data_t data = {};
+
+    u64 tsp = bpf_ktime_get_ns();
+
+    valp = infotmp.lookup(&id);
+    if (valp == 0) {
+        // missed entry
+        return 0;
+    }
+    bpf_probe_read(&data.comm, sizeof(data.comm), valp->comm);
+    bpf_probe_read(&data.fname, sizeof(data.fname), (void *)valp->fname);
+    data.id = valp->id;
+	data.uid = (u32) bpf_get_current_uid_gid();
+
+    data.ts = tsp / 1000;
+    data.ret = PT_REGS_RC(ctx);
+
+    events.perf_submit(ctx, &data, sizeof(data));
+    infotmp.delete(&id);
+
+    return 0;
+}
+
+/*
 static int do_entry(struct pt_regs *ctx, struct file *file,
     char __user *buf, size_t count, int is_read)
 {
@@ -94,31 +159,6 @@ static int do_entry(struct pt_regs *ctx, struct file *file,
 	    }
 	}
 
-	/*
-	tmp_de = tmp_de->d_parent;
-   	bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
-	int i;
-	for(i = 0; i< sizeof(info.parent); i++) {
-          info.parent2[i+buff_start] = buffer[i];
-	}*/
-
-	//info.parent[i+buff_start+1] = '/';
-	//info.parent[i+buff_start+2] = 0;
-    
-
-//	while (de) {
-//		de = de->d_parent;
-		/*
-    	struct dentry *parent = de->d_parent;
-   	    bpf_probe_read(&buffer, sizeof(info.parent), (void *) de->d_parent->d_name.name);
-
-	    for(int i = 0; i< sizeof(info.parent); i++) {
-            info.parent[i+buff_start] = buffer[i];
-	    }
-		tmp_de = tmp_de->d_parent;
-		*/
-//	}
-
 	info.inode = file->f_inode->i_ino;
 
     bpf_get_current_comm(&info.comm, sizeof(info.comm));
@@ -161,7 +201,7 @@ int trace_read_entry(struct pt_regs *ctx, struct file *file,
     char __user *buf, size_t count)
 {
     return do_entry(ctx, file, buf, count, 1);
-}
+}*/
 
 
 BPF_HASH(currsock, u32, struct sock *);

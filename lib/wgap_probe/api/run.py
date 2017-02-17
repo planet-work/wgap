@@ -4,10 +4,12 @@
 from __future__ import absolute_import
 
 import os
+from os.path import basename
 import pwd
 import platform
 from subprocess import Popen, PIPE
-from time import sleep
+# from time import sleep
+import ctypes as ct
 from ..core import logger
 from ..core import config
 from bcc import BPF
@@ -17,6 +19,9 @@ import pprint
 # import yaml
 
 UID_CACHE = {}
+
+TASK_COMM_LEN = 16    # linux/sched.h
+NAME_MAX = 255        # linux/limits.h
 
 
 class Event:
@@ -41,9 +46,12 @@ class Event:
 def get_username(uid):
     if uid in UID_CACHE:
         return UID_CACHE[uid]
-    p = pwd.getpwuid(uid)
-    UID_CACHE[uid] = p.pw_name
-    return p.pw_name
+    try:
+        p = pwd.getpwuid(uid)
+        UID_CACHE[uid] = p.pw_name
+    except KeyError:
+        UID_CACHE[uid] = '????'
+    return UID_CACHE[uid]
 
 
 def send_output(data):
@@ -80,6 +88,48 @@ def create_bpf_probe():
     return bpf_text
 
 
+class Data(ct.Structure):
+    _fields_ = [
+        ("id", ct.c_ulonglong),
+        ("ts", ct.c_ulonglong),
+        ("ret", ct.c_int),
+        ("comm", ct.c_char * TASK_COMM_LEN),
+        ("fname", ct.c_char * NAME_MAX),
+        ("uid", ct.c_uint)
+    ]
+
+initial_ts = 0
+
+
+# process event
+def process_event(cpu, data, size):
+    event = ct.cast(data, ct.POINTER(Data)).contents
+    global initial_ts
+
+    # if event.ret >= 0:
+    #     fd_s = event.ret
+    #     err = 0
+    # else:
+    #     fd_s = -1
+    #     err = - event.ret
+
+    if not initial_ts:
+        initial_ts = event.ts
+
+    evt = Event()
+    evt.file_name = event.fname
+    if basename(evt.file_name) in config.filter.exclude_files:
+        return None
+    evt.username = get_username(event.uid)
+
+    for excl in config.filter.exclude_paths:
+        if fnmatch.fnmatch(evt.file_parentdir, excl):
+            return None
+
+    evt.progname = event.comm.decode('utf-8')
+    send_output(evt)
+
+
 def main(**kwargs):
     """ Execute the command.
 
@@ -110,63 +160,20 @@ def main(**kwargs):
     # Attach probe to configured entries
     logger.debug("Attach probe to %s" % ','.join(config.input))
     if 'file_read' in config.input:
-        logger.debug("Attaching __vfs_read")
-        b.attach_kprobe(event="__vfs_read", fn_name="trace_read_entry")
-    if 'file_write' in config.input:
-        logger.debug("Attaching __vfs_write")
-        b.attach_kprobe(event="__vfs_write", fn_name="trace_write_entry")
+        logger.debug("Attaching __sys_open")
+        b.attach_kprobe(event="sys_open", fn_name="trace_sys_open_entry")
+        b.attach_kretprobe(event="sys_open", fn_name="trace_sys_open_return")
+    #
+    # if 'file_read' in config.input:
+    #    logger.debug("Attaching __vfs_read")
+    #     b.attach_kprobe(event="__vfs_read", fn_name="trace_read_entry")
+    # if 'file_write' in config.input:
+    #     logger.debug("Attaching __vfs_write")
+    #     b.attach_kprobe(event="__vfs_write", fn_name="trace_write_entry")
 
     # Main loop
     logger.debug("Starting main loop every %i seconds" % config.poll_interval)
-    exiting = 0
+    b["events"].open_perf_buffer(process_event)
     while 1:
-        try:
-            sleep(config.poll_interval)
-        except KeyboardInterrupt:
-            exiting = 1
-
-        counts = b.get_table("fileops")
-
-        for k, v in reversed(sorted(counts.items(),
-                                    key=lambda counts: counts[1].rbytes)):
-            excluded = False
-            evt = Event()
-            name = k.name.decode('utf-8')
-            if name in config.filter.exclude_files:
-                continue
-            k.user = get_username(k.uid)
-            if k.user in config.filter.exclude_users:
-                continue
-            evt.pid = int(k.pid)
-            evt.username = k.user
-            evt.type = '%1s' % k.type.decode('utf-8')
-            evt.file_name = k.name.decode('utf-8')
-            parents = [k.parent1.decode('utf-8'),
-                       k.parent2.decode('utf-8'),
-                       k.parent3.decode('utf-8'),
-                       k.parent4.decode('utf-8')]
-            parents = list(filter(None, parents))
-            parents.reverse()
-            evt.file_parentdir = '/'.join(parents).replace('//', '/')
-
-            for excl in config.filter.exclude_paths:
-                if fnmatch.fnmatch(evt.file_parentdir, excl):
-                    excluded = True
-            if excluded:
-                continue
-
-            evt.file_inodenum = int(k.inode)
-            evt.uid = int(k.uid)
-            evt.progname = k.comm.decode('utf-8')
-            # evt.gid = k.gid
-            send_output(evt)
-
-            # 1 event for DEBUG
-            # logger.error("TEST MODE STOPPING!")
-            # exiting = 1
-
-        if exiting:
-            logger.debug("Detaching...")
-            exit()
-
+        b.kprobe_poll()
     return 0
