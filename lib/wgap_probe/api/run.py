@@ -11,6 +11,7 @@ from time import sleep
 from ..core import logger
 from ..core import config
 from bcc import BPF
+import fnmatch
 # import json
 import pprint
 # import yaml
@@ -46,8 +47,8 @@ def get_username(uid):
 
 
 def send_output(data):
-    print("~"*80)
     # j = json.dumps(data.__dict__)
+    # print("%s %s/%s" % (data.username, data.file_parentdir, data.file_name))
     if 'console' in config.output:
         pprint.pprint(data.__dict__)
 
@@ -126,11 +127,11 @@ def main(**kwargs):
 
         counts = b.get_table("fileops")
 
-        print(dir(counts))
         for k, v in reversed(sorted(counts.items(),
                                     key=lambda counts: counts[1].rbytes)):
+            excluded = False
             evt = Event()
-            name = k.name
+            name = k.name.decode('utf-8')
             if name in config.filter.exclude_files:
                 continue
             k.user = get_username(k.uid)
@@ -147,6 +148,13 @@ def main(**kwargs):
             parents = list(filter(None, parents))
             parents.reverse()
             evt.file_parentdir = '/'.join(parents).replace('//', '/')
+
+            for excl in config.filter.exclude_paths:
+                if fnmatch.fnmatch(evt.file_parentdir, excl):
+                    excluded = True
+            if excluded:
+                continue
+
             evt.file_inodenum = int(k.inode)
             evt.uid = int(k.uid)
             evt.progname = k.comm.decode('utf-8')
@@ -154,8 +162,8 @@ def main(**kwargs):
             send_output(evt)
 
             # 1 event for DEBUG
-            logger.error("TEST MODE STOPPING!")
-            exiting = 1
+            # logger.error("TEST MODE STOPPING!")
+            # exiting = 1
 
         if exiting:
             logger.debug("Detaching...")

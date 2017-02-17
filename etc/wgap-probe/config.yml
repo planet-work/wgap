@@ -22,11 +22,17 @@ filter:
         - test-cluster2
     exclude_paths:
         - "*/cache/"
+        - "*/debian-*/tmp"
+        - "/tmp"
+        - "/var/lib/tmp"
+        - "*/sent-mails"
+        - "*/cache/smarty/cache"
     exclude_files:
         - access.log
         - error.log
         - processes.log
         - other_vhosts_access.log
+        - counter_enneagramme.dat
     exclude_ports:
         - 3306
    

@@ -10,7 +10,7 @@ struct info_t {
     u32 name_len;
     char comm[TASK_COMM_LEN];
     // de->d_name.name may point to de->d_iname so limit len accordingly
-    char name[DNAME_INLINE_LEN];
+    char name[64];
     char type;
 	int optype;
 	char parent1[32];
@@ -77,7 +77,7 @@ static int do_entry(struct pt_regs *ctx, struct file *file,
               info.parent2[i+buff_start] = buffer[i];
 	    }
 	}
-/*
+
 	if (tmp_de->d_parent != NULL) {
     	tmp_de = tmp_de->d_parent;
    	    bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
@@ -92,7 +92,7 @@ static int do_entry(struct pt_regs *ctx, struct file *file,
 	    for(i = 0; i< sizeof(info.parent4); i++) {
               info.parent4[i+buff_start] = buffer[i];
 	    }
-	}*/
+	}
 
 	/*
 	tmp_de = tmp_de->d_parent;
