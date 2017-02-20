@@ -3,10 +3,11 @@
 """
 from __future__ import absolute_import
 
+import sys
 import os
-from os.path import basename, dirname
 from pwd import getpwuid
 import platform
+from time import gmtime, mktime
 from subprocess import Popen, PIPE
 # from time import sleep
 import ctypes as ct
@@ -14,19 +15,24 @@ from ..core import logger
 from ..core import config
 from bcc import BPF
 import fnmatch
-# import json
-import pprint
+import json
+# import pprint
 # import yaml
+import http.client
+from socket import gethostname
 
 UID_CACHE = {}
 
 TASK_COMM_LEN = 16    # linux/sched.h
 NAME_MAX = 255        # linux/limits.h
+HOSTNAME = gethostname()
 
 
 class Event:
     def __init__(self):
         d = self.__dict__
+        d['hostname'] = HOSTNAME
+        d['timestamp'] = mktime(gmtime())
         d['pid'] = 0
         d['uid'] = 0
         d['gid'] = 0
@@ -53,14 +59,25 @@ def get_username(uid):
 
 
 def send_output(data):
-    # j = json.dumps(data.__dict__)
-    print("%s %s %s %s" % (data.event,
-                           data.username,
-                           data.filename,
-                           data.progname))
-    return None
     if 'console' in config.output:
-        pprint.pprint(data.__dict__)
+        print("%s %s %s %s" % (data.event,
+                               data.username,
+                               data.filename,
+                               data.progname))
+        # pprint.pprint(data.__dict__)
+
+    if 'collector' in config.output:
+        params = json.dumps(data.__dict__)
+        headers = {"Content-type": "application/json",
+                   "Accept": "application/json"}
+        address = config.output.collector.address.split(':')[0]
+        port = int(config.output.collector.address.split(':')[1])
+        conn = http.client.HTTPConnection(address, int(port))
+        try:
+            conn.request("POST", "", params, headers)
+        except:
+            logger.error("Cannot sent event to collector:%s" %
+                         sys.exc_info()[0])
 
 
 def create_bpf_probe():
@@ -138,8 +155,10 @@ def process_event(cpu, data, size):
                 keep = True
         if not keep:
             return None
-    if basename(evt.filename) in config.filter.exclude_files:
-        return None
+
+    evt.uid = event.uid
+    # evt.gid = event.gid
+    evt.pid = event.pid
     evt.username = get_username(event.uid)
     mode = event.mode.decode('ascii')
     if mode == 'R':
@@ -147,8 +166,8 @@ def process_event(cpu, data, size):
     elif mode == 'W':
         evt.event = 'file_write'
 
-    for excl in config.filter.exclude_paths:
-        if fnmatch.fnmatch(dirname(evt.filename), excl):
+    for excl in config.filter.exclude_files:
+        if fnmatch.fnmatch(evt.filename, excl):
             return None
 
     evt.progname = event.comm.decode('utf-8')

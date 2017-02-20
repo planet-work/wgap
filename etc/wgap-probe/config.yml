@@ -21,7 +21,7 @@ filter:
     exclude_users:
         - planet-work
         - test-cluster2
-    exclude_paths:
+    exclude_files:
         - "*/cache/*"
         - "*/debian-*/tmp/*"
         - "/tmp/*"
@@ -34,12 +34,6 @@ filter:
         - "*/logs/error.php"
         - "*/wp-content/cache/*"
         - "*/plugins/wordfence/tmp/configCache.php"
-    exclude_files:
-        - access.log
-        - error.log
-        - processes.log
-        - other_vhosts_access.log
-        - counter_enneagramme.dat
     exclude_ports:
         - 3306
    
@@ -49,9 +43,10 @@ callbacks:
         - function: check_pms
 
 output:
-    - collector:
-        address: 127.0.0.1:6201
+    collector:
+        address: 10.3.1.251:6201
         format: json
-    - console
+    console:
+        format: text
 
 
