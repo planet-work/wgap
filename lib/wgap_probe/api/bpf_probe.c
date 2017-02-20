@@ -5,23 +5,23 @@
 
 // the key for the output summary
 struct val_t {
-	u64 id;
-	u64 ts;
+    u64 id;
+    u64 ts;
     u32 uid;
     u32 gid;
     u32 name_len;
-	u32 flags;
+    u32 flags;
     char comm[TASK_COMM_LEN];
     // de->d_name.name may point to de->d_iname so limit len accordingly
-	const char *fname;
+    const char *fname;
     char name[64];
     char mode;
-	int optype;
-	/*char parent1[32];
-	char parent2[32];
-	char parent3[32];
-	char parent4[32];
-	u32 directory_len;
+    int optype;
+    /*char parent1[32];
+    char parent2[32];
+    char parent3[32];
+    char parent4[32];
+    u32 directory_len;
     unsigned long inode; */
 };
 
@@ -29,11 +29,11 @@ struct val_t {
 struct data_t {
     u64 id;
     u64 ts;
-	int ret;
+    int ret;
     u32 pid;
     u32 uid;
-	char mode;
-	char comm[TASK_COMM_LEN]; 
+    char mode;
+    char comm[TASK_COMM_LEN]; 
     char fname[NAME_MAX]; 
 };
 
@@ -60,11 +60,11 @@ int trace_sys_open_entry(struct pt_regs *ctx, const char __user *filename, int f
         return 0;
 
     val.mode = 'R';
-	if (flags & (O_WRONLY | O_RDWR)) {
-	    val.mode = 'W';
-	} 
-	if (MODE_FILTER)
-		return 0;
+    if (flags & (O_WRONLY | O_RDWR)) {
+        val.mode = 'W';
+    } 
+    if (MODE_FILTER)
+        return 0;
 
     if (bpf_get_current_comm(&val.comm, sizeof(val.comm)) == 0) {
         val.id = id;
@@ -94,7 +94,7 @@ int trace_sys_open_return(struct pt_regs *ctx)
     bpf_probe_read(&data.comm, sizeof(data.comm), valp->comm);
     bpf_probe_read(&data.fname, sizeof(data.fname), (void *)valp->fname);
     data.id = valp->id;
-	data.uid = (u32) bpf_get_current_uid_gid();
+    data.uid = (u32) bpf_get_current_uid_gid();
     data.mode = valp->mode;
     data.ts = tsp / 1000;
     data.ret = PT_REGS_RC(ctx);
@@ -109,10 +109,10 @@ int trace_sys_open_return(struct pt_regs *ctx)
 static int do_entry(struct pt_regs *ctx, struct file *file,
     char __user *buf, size_t count, int is_read)
 {
-	struct task_struct *task; 
+    struct task_struct *task; 
     struct dentry *tmp_de;
 
-	char buffer[32];
+    char buffer[32];
     int buff_start = 0;
 
     u32 tgid = bpf_get_current_pid_tgid() >> 32;
@@ -136,64 +136,64 @@ static int do_entry(struct pt_regs *ctx, struct file *file,
     // store fileops and sizes by pid & file
     struct info_t info = {.pid = pid};
     bpf_probe_read(&info.name, sizeof(info.name), (void *)de->d_name.name);
-	//info.fp = file->f_path;
-	
-	tmp_de = de->d_parent;
-   	bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
-	int i;
-	for(i = 0; i< sizeof(info.parent1); i++) {
+    //info.fp = file->f_path;
+    
+    tmp_de = de->d_parent;
+       bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
+    int i;
+    for(i = 0; i< sizeof(info.parent1); i++) {
           info.parent1[i+buff_start] = buffer[i];
-	}
+    }
   
-	if (tmp_de->d_parent != NULL) {
-    	tmp_de = tmp_de->d_parent;
-   	    bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
-	    for(i = 0; i< sizeof(info.parent2); i++) {
+    if (tmp_de->d_parent != NULL) {
+        tmp_de = tmp_de->d_parent;
+           bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
+        for(i = 0; i< sizeof(info.parent2); i++) {
               info.parent2[i+buff_start] = buffer[i];
-	    }
-	}
+        }
+    }
 
-	if (tmp_de->d_parent != NULL) {
-    	tmp_de = tmp_de->d_parent;
-   	    bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
-	    for(i = 0; i< sizeof(info.parent3); i++) {
+    if (tmp_de->d_parent != NULL) {
+        tmp_de = tmp_de->d_parent;
+           bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
+        for(i = 0; i< sizeof(info.parent3); i++) {
               info.parent3[i+buff_start] = buffer[i];
-	    }
-	}
+        }
+    }
 
-	if (tmp_de->d_parent != NULL) {
-    	tmp_de = tmp_de->d_parent;
-   	    bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
-	    for(i = 0; i< sizeof(info.parent4); i++) {
+    if (tmp_de->d_parent != NULL) {
+        tmp_de = tmp_de->d_parent;
+           bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
+        for(i = 0; i< sizeof(info.parent4); i++) {
               info.parent4[i+buff_start] = buffer[i];
-	    }
-	}
+        }
+    }
 
-	info.inode = file->f_inode->i_ino;
+    info.inode = file->f_inode->i_ino;
 
     bpf_get_current_comm(&info.comm, sizeof(info.comm));
-	task = (struct task_struct *)bpf_get_current_task(); 
+    task = (struct task_struct *)bpf_get_current_task(); 
 
 
     info.name_len = de->d_name.len;
     info.uid = uid;
     if (is_read) {
         info.type = 'R';
-	} else {
+    } else {
         info.type = 'W';
-	}
+    }
 
     struct val_t *valp, zero = {};
     valp = fileops.lookup_or_init(&info, &zero);
-	info.optype = 12;
+    info.optype = 12;
     if (is_read) {
         info.type = 'R';
-		info.optype = 1;
+        info.optype = 1;
         valp->reads++;
         valp->rbytes += count;
     } else {
         info.type = 'W';
-		info.optype = 2;
+        info.optype = 2;
         valp->writes++;
         valp->wbytes += count;
     }

@@ -10,23 +10,30 @@ poll_interval: 1
 
 input:
     - file_write
-    - file_read
     - tcp_connect
     - tcp_listen
 
 filter:
     uid_min: 1000
     gid_min: 1000
+    include_files:
+        - '*.php'
     exclude_users:
         - planet-work
         - test-cluster2
     exclude_paths:
-        - "*/cache/"
-        - "*/debian-*/tmp"
-        - "/tmp"
-        - "/var/lib/tmp"
-        - "*/sent-mails"
-        - "*/cache/smarty/cache"
+        - "*/cache/*"
+        - "*/debian-*/tmp/*"
+        - "/tmp/*"
+        - "/var/lib/tmp/*"
+        - "*/sent-mails/*"
+        - "*/cache/smarty/cache/*"
+        - "*/wp-content/wflogs/ips.php"
+        - "*/wp-content/wflogs/config.php"
+        - "*/wp-content/wflogs/attack-data.php"
+        - "*/logs/error.php"
+        - "*/wp-content/cache/*"
+        - "*/plugins/wordfence/tmp/configCache.php"
     exclude_files:
         - access.log
         - error.log

@@ -131,6 +131,13 @@ def process_event(cpu, data, size):
 
     evt = Event()
     evt.filename = event.fname.decode('utf-8')
+    if config.filter.include_files:
+        keep = False
+        for ext in config.filter.include_files:
+            if fnmatch.fnmatch(evt.filename, ext):
+                keep = True
+        if not keep:
+            return None
     if basename(evt.filename) in config.filter.exclude_files:
         return None
     evt.username = get_username(event.uid)
@@ -177,7 +184,7 @@ def main(**kwargs):
 
     # Attach probe to configured entries
     logger.debug("Attach probe to %s" % ','.join(config.input))
-    if 'file_read' in config.input:
+    if 'file_read' in config.input or 'file_write' in config.input:
         logger.debug("Attaching __sys_open")
         b.attach_kprobe(event="sys_open", fn_name="trace_sys_open_entry")
         b.attach_kretprobe(event="sys_open", fn_name="trace_sys_open_return")
