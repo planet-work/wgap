@@ -21,18 +21,19 @@ def _cmdline(argv=None):
     """
     parser = ArgumentParser()
     parser.add_argument(
-            "-c", "--config", action="append",
-            help="config file [/etc/wgap-probe/config.yml]")
+        "-c", "--config", action="append",
+        help="config file [/etc/wgap-probe/config.yml]")
     parser.add_argument(
-            "-v", "--version", action="version",
-            version="wgap {:s}".format(__version__.__version__),
-            help="print version and exit")
+        "-v", "--version", action="version",
+        version="wgap {:s}".format(__version__.__version__),
+        help="print version and exit"
+    )
     # parser.add_argument(
     #         "-d", "--debug", default="DEBUG",
     #        help="logger debug level [DEBUG]")
     parser.add_argument(
-            "-w", "--warn", default="WARNING",
-            help="logger warning level [WARNING]")
+        "-w", "--warn", default="WARNING",
+        help="logger warning level [WARNING]")
     subparsers = parser.add_subparsers(title="commands")
     run_parser = subparsers.add_parser("run")
     run_parser.set_defaults(command=run)

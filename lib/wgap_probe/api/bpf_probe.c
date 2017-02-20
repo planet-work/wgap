@@ -10,11 +10,12 @@ struct val_t {
     u32 uid;
     u32 gid;
     u32 name_len;
+	u32 flags;
     char comm[TASK_COMM_LEN];
     // de->d_name.name may point to de->d_iname so limit len accordingly
 	const char *fname;
     char name[64];
-    char type;
+    char mode;
 	int optype;
 	/*char parent1[32];
 	char parent2[32];
@@ -31,6 +32,7 @@ struct data_t {
 	int ret;
     u32 pid;
     u32 uid;
+	char mode;
 	char comm[TASK_COMM_LEN]; 
     char fname[NAME_MAX]; 
 };
@@ -39,7 +41,7 @@ BPF_HASH(infotmp, u64, struct val_t);
 BPF_PERF_OUTPUT(events);
 
 
-int trace_sys_open_entry(struct pt_regs *ctx, const char __user *filename)
+int trace_sys_open_entry(struct pt_regs *ctx, const char __user *filename, int flags, umode_t mode)
 {
     struct val_t val = {};
     u64 id = bpf_get_current_pid_tgid();
@@ -57,11 +59,19 @@ int trace_sys_open_entry(struct pt_regs *ctx, const char __user *filename)
     if (UID_FILTER)
         return 0;
 
+    val.mode = 'R';
+	if (flags & (O_WRONLY | O_RDWR)) {
+	    val.mode = 'W';
+	} 
+	if (MODE_FILTER)
+		return 0;
+
     if (bpf_get_current_comm(&val.comm, sizeof(val.comm)) == 0) {
         val.id = id;
         val.ts = bpf_ktime_get_ns();
         val.fname = filename;
         val.uid = uid;
+
         infotmp.update(&id, &val);
     }
 
@@ -85,7 +95,7 @@ int trace_sys_open_return(struct pt_regs *ctx)
     bpf_probe_read(&data.fname, sizeof(data.fname), (void *)valp->fname);
     data.id = valp->id;
 	data.uid = (u32) bpf_get_current_uid_gid();
-
+    data.mode = valp->mode;
     data.ts = tsp / 1000;
     data.ret = PT_REGS_RC(ctx);
 

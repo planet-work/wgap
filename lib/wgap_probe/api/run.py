@@ -4,8 +4,8 @@
 from __future__ import absolute_import
 
 import os
-from os.path import basename
-import pwd
+from os.path import basename, dirname
+from pwd import getpwuid
 import platform
 from subprocess import Popen, PIPE
 # from time import sleep
@@ -32,9 +32,7 @@ class Event:
         d['gid'] = 0
         d['username'] = ''
         d['groupname'] = ''
-        d['file_name'] = ''
-        d['file_inodenum'] = 0
-        d['file_parentdir'] = ''
+        d['filename'] = ''
         d['progname'] = ''
         d['event'] = ''
         d['path'] = ''
@@ -47,7 +45,7 @@ def get_username(uid):
     if uid in UID_CACHE:
         return UID_CACHE[uid]
     try:
-        p = pwd.getpwuid(uid)
+        p = getpwuid(uid)
         UID_CACHE[uid] = p.pw_name
     except KeyError:
         UID_CACHE[uid] = '????'
@@ -56,7 +54,11 @@ def get_username(uid):
 
 def send_output(data):
     # j = json.dumps(data.__dict__)
-    # print("%s %s/%s" % (data.username, data.file_parentdir, data.file_name))
+    print("%s %s %s %s" % (data.event,
+                           data.username,
+                           data.filename,
+                           data.progname))
+    return None
     if 'console' in config.output:
         pprint.pprint(data.__dict__)
 
@@ -85,6 +87,14 @@ def create_bpf_probe():
         bpf_text = bpf_text.replace('UID_FILTER', 'uid < %i' % uid_min)
     else:
         bpf_text = bpf_text.replace('UID_FILTER', '0')
+
+    if 'file_read' in config.input and 'file_write' not in config.input:
+        bpf_text = bpf_text.replace('MODE_FILTER', "val.mode != 'R'")
+    elif 'file_write' in config.input and 'file_read' not in config.input:
+        bpf_text = bpf_text.replace('MODE_FILTER', "val.mode != 'W'")
+    else:
+        bpf_text = bpf_text.replace('MODE_FILTER', '0')
+
     return bpf_text
 
 
@@ -93,10 +103,13 @@ class Data(ct.Structure):
         ("id", ct.c_ulonglong),
         ("ts", ct.c_ulonglong),
         ("ret", ct.c_int),
+        ("pid", ct.c_uint),
+        ("uid", ct.c_uint),
+        ("mode", ct.c_char),
         ("comm", ct.c_char * TASK_COMM_LEN),
         ("fname", ct.c_char * NAME_MAX),
-        ("uid", ct.c_uint)
     ]
+
 
 initial_ts = 0
 
@@ -117,13 +130,18 @@ def process_event(cpu, data, size):
         initial_ts = event.ts
 
     evt = Event()
-    evt.file_name = event.fname
-    if basename(evt.file_name) in config.filter.exclude_files:
+    evt.filename = event.fname.decode('utf-8')
+    if basename(evt.filename) in config.filter.exclude_files:
         return None
     evt.username = get_username(event.uid)
+    mode = event.mode.decode('ascii')
+    if mode == 'R':
+        evt.event = 'file_read'
+    elif mode == 'W':
+        evt.event = 'file_write'
 
     for excl in config.filter.exclude_paths:
-        if fnmatch.fnmatch(evt.file_parentdir, excl):
+        if fnmatch.fnmatch(dirname(evt.filename), excl):
             return None
 
     evt.progname = event.comm.decode('utf-8')
