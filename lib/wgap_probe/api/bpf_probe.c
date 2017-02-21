@@ -13,7 +13,7 @@
 // the key for the output summary
 struct val_t {
     u64 id;
-    u64 ts;
+    u64 ts_us;
     u32 uid;
     u32 gid;
     u32 name_len;
@@ -30,7 +30,7 @@ struct val_t {
 // the value of the output summary
 struct data_t {
     u64 id;
-    u64 ts;
+    u64 ts_us;
     int ret;
     u32 pid;
     u32 uid;
@@ -47,6 +47,7 @@ struct data_t {
 };
 
 BPF_HASH(infotmp, u64, struct val_t);
+BPF_HASH(currsock, u32, struct sock *);
 BPF_PERF_OUTPUT(events);
 
 
@@ -77,7 +78,7 @@ int trace_sys_open_entry(struct pt_regs *ctx, const char __user *filename, int f
 
     if (bpf_get_current_comm(&val.comm, sizeof(val.comm)) == 0) {
         val.id = id;
-        val.ts = bpf_ktime_get_ns();
+        val.ts_us = bpf_ktime_get_ns();
         val.data1 = filename;
         val.uid = uid;
 
@@ -106,7 +107,7 @@ int trace_sys_open_return(struct pt_regs *ctx)
 	data.pid = id >> 32;
     data.uid = (u32) bpf_get_current_uid_gid();
     data.mode = valp->mode;
-    data.ts = tsp / 1000;
+    data.ts_us = tsp / 1000;
     data.ret = PT_REGS_RC(ctx);
 
     events.perf_submit(ctx, &data, sizeof(data));
@@ -144,6 +145,7 @@ int trace_sys_execve(struct pt_regs *ctx, struct filename *filename,
     u32 gid = bpf_get_current_uid_gid() >> 32;
 	data.uid = uid;
 	//data.gid = gid;
+    data.ts_us = bpf_ktime_get_ns() / 1000;
 
     if (GID_FILTER)
         return 0;
@@ -203,6 +205,7 @@ int trace_inet_listen(struct pt_regs *ctx, struct socket *sock, int backlog)
 	// Get socket IP family
 	u16 family = sk->__sk_common.skc_family;
 	data.proto = family << 16 | SOCK_STREAM;
+    data.ts_us = bpf_ktime_get_ns() / 1000;
 
 	// Get PID
 	data.pid = bpf_get_current_pid_tgid() >>32;
@@ -245,3 +248,87 @@ int trace_inet_listen(struct pt_regs *ctx, struct socket *sock, int backlog)
 	return 0;
 };
 
+int trace_connect_entry(struct pt_regs *ctx, struct sock *sk)
+{
+    // stash the sock ptr for lookup on return
+
+	u32 pid = bpf_get_current_pid_tgid();
+    u32 uid = (unsigned)(bpf_get_current_uid_gid() & 0xffffffff);
+    u32 gid = bpf_get_current_uid_gid() >> 32;
+    if (GID_FILTER)
+        return 0;
+    if (UID_FILTER)
+        return 0;
+
+    currsock.update(&pid, &sk);
+    return 0;
+};
+
+static int trace_connect_return(struct pt_regs *ctx, short ipver)
+{
+    int ret = PT_REGS_RC(ctx);
+    u32 pid = bpf_get_current_pid_tgid();
+
+    struct sock **skpp;
+    skpp = currsock.lookup(&pid);
+    if (skpp == 0) {
+        return 0;   // missed entry
+    }
+
+    if (ret != 0) {
+        // failed to send SYNC packet, may not have populated
+        // socket __sk_common.{skc_rcv_saddr, ...}
+        currsock.delete(&pid);
+        return 0;
+    }
+
+    // pull in details
+    struct sock *skp = *skpp;
+    u16 dport = 0;
+    bpf_probe_read(&dport, sizeof(dport), &skp->__sk_common.skc_dport);
+
+    if(PORT_FILTER) {
+        currsock.delete(&pid);
+        return 0;
+    }
+
+    struct data_t data = {};
+	data.mode = 'C';
+    data.uid = (unsigned)(bpf_get_current_uid_gid() & 0xffffffff);
+	data.pid = pid;
+    data.ts_us = bpf_ktime_get_ns() / 1000;
+    bpf_get_current_comm(&data.comm, sizeof(data.comm));
+    data.rport = ntohs(dport);
+
+	u16 family = &skp->__sk_common.skc_family;
+	data.proto = family << 16 | SOCK_STREAM;
+
+    if (ipver == 4) {
+        bpf_probe_read(&data.laddr[0], sizeof(u32),
+            &skp->__sk_common.skc_rcv_saddr);
+        bpf_probe_read(&data.raddr[0], sizeof(u32),
+            &skp->__sk_common.skc_daddr);
+    } else {
+		/*
+        bpf_probe_read(&data6.saddr, sizeof(data6.saddr),
+            &skp->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr32);
+        bpf_probe_read(&data6.daddr, sizeof(data6.daddr),
+            &skp->__sk_common.skc_v6_daddr.in6_u.u6_addr32);
+			*/
+    }
+
+	events.perf_submit(ctx, &data, sizeof(data));
+    currsock.delete(&pid);
+
+    return 0;
+}
+
+int trace_connect_v4_return(struct pt_regs *ctx)
+{
+    return trace_connect_return(ctx, 4);
+}
+
+int trace_connect_v6_return(struct pt_regs *ctx)
+{
+    return trace_connect_return(ctx, 6);
+}

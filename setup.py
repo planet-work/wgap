@@ -11,7 +11,7 @@ from subprocess import CalledProcessError
 
 from setuptools import Command
 from setuptools import find_packages
-from setuptools import setup
+from setuptools import setup, Extension
 
 
 def _listdir(root):
@@ -35,7 +35,8 @@ _CONFIG = {
     "entry_points": {
         "console_scripts": ("wgap-probe = wgap_probe.cli:main",),
     },
-    "data_files": list(chain.from_iterable(_listdir(root) for root in _DATA))
+    "data_files": list(chain.from_iterable(_listdir(root) for root in _DATA)),
+    "package_data": {'wgap_probe': ['api/*.c']},
 }
 
 

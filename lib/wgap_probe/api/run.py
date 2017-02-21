@@ -107,9 +107,18 @@ def create_bpf_probe():
 
     if 'uid_min' in config.filter:
         uid_min = config.filter.uid_min
-        bpf_text = bpf_text.replace('UID_FILTER', 'uid < %i' % uid_min)
+        bpf_text = bpf_text.replace('UID_FILTER',
+                                    'uid < %i || uid == 65534' % uid_min)
     else:
         bpf_text = bpf_text.replace('UID_FILTER', '0')
+
+    if 'exclude_ports' in config.filter:
+        dports = config.filter.exclude_ports
+        p_if = ' && '.join(['dport == %d' % socket.ntohs(dport)
+                            for dport in dports])
+        bpf_text = bpf_text.replace('PORT_FILTER', p_if)
+    else:
+        bpf_text = bpf_text.replace('PORT_FILTER', '0')
 
     if 'file_read' in config.input and 'file_write' not in config.input:
         bpf_text = bpf_text.replace('MODE_FILTER', "val.mode != 'R'")
@@ -124,7 +133,7 @@ def create_bpf_probe():
 class Data(ct.Structure):
     _fields_ = [
         ("id", ct.c_ulonglong),
-        ("ts", ct.c_ulonglong),
+        ("ts_us", ct.c_ulonglong),
         ("ret", ct.c_int),
         ("pid", ct.c_uint),
         ("uid", ct.c_uint),
@@ -150,7 +159,7 @@ def process_event(cpu, data, size):
     global initial_ts
 
     if not initial_ts:
-        initial_ts = event.ts
+        initial_ts = event.ts_us
 
     evt = Event()
 
@@ -173,6 +182,7 @@ def process_event(cpu, data, size):
     evt.pid = event.pid
     evt.progname = event.comm.decode('utf-8')
     evt.username = get_username(event.uid)
+    evt.timestamp = event.ts_us
 
     if mode in ['R', 'W']:
         evt.filename = event.data1.decode('utf-8')
@@ -189,7 +199,7 @@ def process_event(cpu, data, size):
                 return None
     elif mode == 'E':
         evt.filename = event.data1.decode('utf-8')
-    elif mode == 'L':
+    elif mode in ['L', 'C']:
         proto_family = event.proto & 0xff
         proto_type = event.proto >> 16 & 0xff
 
@@ -210,9 +220,9 @@ def process_event(cpu, data, size):
                                          version=6)
             raddress = netaddr.IPAddress(event.raddr[0] << 64 | event.raddr[1],
                                          version=6)
-            protocol += "v6"
+            protocol += "v5"
         evt.local_port = event.lport
-        evt.repote_port = event.rport
+        evt.remote_port = event.rport
         evt.local_ip = '%s' % laddress
         evt.remote_ip = '%s' % raddress
         evt.protocol = protocol
@@ -256,6 +266,15 @@ def main(**kwargs):
     if 'execve' in config.input:
         logger.debug("Attaching __sys_execve")
         b.attach_kprobe(event="sys_execve", fn_name="trace_sys_execve")
+    if 'tcp_connect' in config.input:
+        logger.debug("Attaching __tcp_connect")
+        b.attach_kprobe(event="tcp_v4_connect", fn_name="trace_connect_entry")
+        b.attach_kprobe(event="tcp_v6_connect", fn_name="trace_connect_entry")
+        b.attach_kretprobe(event="tcp_v4_connect",
+                           fn_name="trace_connect_v4_return")
+        b.attach_kretprobe(event="tcp_v6_connect",
+                           fn_name="trace_connect_v6_return")
+
     if 'inet_listen' in config.input:
         logger.debug("Attaching __inet_listen")
         b.attach_kprobe(event="inet_listen", fn_name="trace_inet_listen")
