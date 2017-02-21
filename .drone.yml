@@ -16,7 +16,7 @@ build:
       - dpkg-buildpackage -b
       - fakeroot debian/rules clean
   test:
-    image: dock.pw.fr/pw/apache-php:jessie
+      image: dock.pw.fr/pw/wgap-probe:jessie
     privileged: true
     commands:
       - echo "****** Tests fonctionnels *****"
