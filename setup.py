@@ -11,7 +11,7 @@ from subprocess import CalledProcessError
 
 from setuptools import Command
 from setuptools import find_packages
-from setuptools import setup, Extension
+from setuptools import setup
 
 
 def _listdir(root):

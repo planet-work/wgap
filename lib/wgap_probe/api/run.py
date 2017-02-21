@@ -65,12 +65,11 @@ def send_output(data):
         pprint.pprint(data.__dict__)
 
     if 'console' in config.output:
-        print("%s %s %s %s[%i]" % (
-                            data.event,
-                            data.username,
-                            data.filename,
-                            data.progname,
-                            data.pid))
+        print("%s %s %s %s[%i]" % (data.event,
+                                   data.username,
+                                   data.filename,
+                                   data.progname,
+                                   data.pid))
 
     if 'collector' in config.output:
         params = json.dumps(data.__dict__)
