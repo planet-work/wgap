@@ -11,7 +11,8 @@ poll_interval: 1
 input:
     - file_write
     - tcp_connect
-    - tcp_listen
+    - inet_listen
+    - execve
 
 filter:
     uid_min: 1000
@@ -22,18 +23,24 @@ filter:
         - planet-work
         - test-cluster2
     exclude_files:
-        - "*/cache/*"
+        - "*/cache/data_cron.lock_check.php"
+        - "*/cache/sql_*php"
         - "*/debian-*/tmp/*"
-        - "/tmp/*"
-        - "/var/lib/tmp/*"
-        - "*/sent-mails/*"
-        - "*/cache/smarty/cache/*"
+        - "*/tmp/meta_cache.php"
+        - "*/cache/class_index.php"
+        - "*/wp-content/cache/db/*"
+        - "*/cache/cbtpl/*"
+        - "*/cache/com_*/*"
+        - "*/cache/mod_*/*"
+        - "*/cache/_system/*"
+        - "*/cache/smarty/cache/*" 
+        - "*/cache/sh404sef_rconfig/*"
         - "*/wp-content/wflogs/ips.php"
         - "*/wp-content/wflogs/config.php"
         - "*/wp-content/wflogs/attack-data.php"
         - "*/logs/error.php"
-        - "*/wp-content/cache/*"
         - "*/plugins/wordfence/tmp/configCache.php"
+        - "*/ecrire/data/meta_cache.php"
     exclude_ports:
         - 3306
    

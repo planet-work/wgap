@@ -4,3 +4,4 @@
 ##
 PyYAML>=3.11
 colorlog
+netaddr

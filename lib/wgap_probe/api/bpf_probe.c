@@ -1,7 +1,14 @@
 #include <uapi/linux/ptrace.h>
 #include <linux/blkdev.h>
 #include <net/sock.h>
+#include <net/inet_sock.h>
+#include <net/net_namespace.h> 
 #include <bcc/proto.h>
+
+
+#define MAXARG   20
+#define ARGSIZE  128
+
 
 // the key for the output summary
 struct val_t {
@@ -13,17 +20,12 @@ struct val_t {
     u32 flags;
     char comm[TASK_COMM_LEN];
     // de->d_name.name may point to de->d_iname so limit len accordingly
-    const char *fname;
+    const char *data1;
     char name[64];
     char mode;
     int optype;
-    /*char parent1[32];
-    char parent2[32];
-    char parent3[32];
-    char parent4[32];
-    u32 directory_len;
-    unsigned long inode; */
 };
+
 
 // the value of the output summary
 struct data_t {
@@ -32,9 +34,16 @@ struct data_t {
     int ret;
     u32 pid;
     u32 uid;
+    u32 gid;
     char mode;
     char comm[TASK_COMM_LEN]; 
-    char fname[NAME_MAX]; 
+    char data1[NAME_MAX]; 
+	u64 proto;
+	u64 laddr[2];
+	u64 raddr[2];
+	u64 lport;
+	u64 rport;
+	//char argv[ARGSIZE];
 };
 
 BPF_HASH(infotmp, u64, struct val_t);
@@ -69,7 +78,7 @@ int trace_sys_open_entry(struct pt_regs *ctx, const char __user *filename, int f
     if (bpf_get_current_comm(&val.comm, sizeof(val.comm)) == 0) {
         val.id = id;
         val.ts = bpf_ktime_get_ns();
-        val.fname = filename;
+        val.data1 = filename;
         val.uid = uid;
 
         infotmp.update(&id, &val);
@@ -92,8 +101,9 @@ int trace_sys_open_return(struct pt_regs *ctx)
         return 0;
     }
     bpf_probe_read(&data.comm, sizeof(data.comm), valp->comm);
-    bpf_probe_read(&data.fname, sizeof(data.fname), (void *)valp->fname);
+    bpf_probe_read(&data.data1, sizeof(data.data1), (void *)valp->data1);
     data.id = valp->id;
+	data.pid = id >> 32;
     data.uid = (u32) bpf_get_current_uid_gid();
     data.mode = valp->mode;
     data.ts = tsp / 1000;
@@ -105,159 +115,133 @@ int trace_sys_open_return(struct pt_regs *ctx)
     return 0;
 }
 
-/*
-static int do_entry(struct pt_regs *ctx, struct file *file,
-    char __user *buf, size_t count, int is_read)
+static int __submit_arg(struct pt_regs *ctx, void *ptr, struct data_t *data)
 {
-    struct task_struct *task; 
-    struct dentry *tmp_de;
+    bpf_probe_read(data->data1, sizeof(data->data1), ptr);
+    events.perf_submit(ctx, data, sizeof(struct data_t));
+    return 1;
+}
+static int submit_arg(struct pt_regs *ctx, void *ptr, struct data_t *data)
+{
+    const char *argp = NULL;
+    bpf_probe_read(&argp, sizeof(argp), ptr);
+    if (argp) {
+        return __submit_arg(ctx, (void *)(argp), data);
+    }
+    return 0;
+}
 
-    char buffer[32];
-    int buff_start = 0;
 
-    u32 tgid = bpf_get_current_pid_tgid() >> 32;
-    u32 gid = bpf_get_current_uid_gid() >> 32;
+int trace_sys_execve(struct pt_regs *ctx, struct filename *filename,
+	    const char __user *const __user *__argv,
+	    const char __user *const __user *__envp)
+{
+	struct data_t data = {};
+	data.mode = 'E'; // Exec
+	data.pid = bpf_get_current_pid_tgid() >> 32;
+
     u32 uid = (unsigned)(bpf_get_current_uid_gid() & 0xffffffff);
-    if (TGID_FILTER)
-        return 0;
+    u32 gid = bpf_get_current_uid_gid() >> 32;
+	data.uid = uid;
+	//data.gid = gid;
+
     if (GID_FILTER)
         return 0;
     if (UID_FILTER)
         return 0;
 
-    u32 pid = bpf_get_current_pid_tgid();
+	bpf_get_current_comm(&data.comm, sizeof(data.comm));
+    __submit_arg(ctx, (void *)filename, &data);
 
-    // skip I/O lacking a filename
-    struct dentry *de = file->f_path.dentry;
-    int mode = file->f_inode->i_mode;
-    if (de->d_name.len == 0 || !S_ISREG(mode))
-        return 0;
-
-    // store fileops and sizes by pid & file
-    struct info_t info = {.pid = pid};
-    bpf_probe_read(&info.name, sizeof(info.name), (void *)de->d_name.name);
-    //info.fp = file->f_path;
+	return 0; // No args yet !
     
-    tmp_de = de->d_parent;
-       bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
-    int i;
-    for(i = 0; i< sizeof(info.parent1); i++) {
-          info.parent1[i+buff_start] = buffer[i];
-    }
-  
-    if (tmp_de->d_parent != NULL) {
-        tmp_de = tmp_de->d_parent;
-           bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
-        for(i = 0; i< sizeof(info.parent2); i++) {
-              info.parent2[i+buff_start] = buffer[i];
-        }
-    }
+    int i = 1;  // skip first arg, as we submitted filename
 
-    if (tmp_de->d_parent != NULL) {
-        tmp_de = tmp_de->d_parent;
-           bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
-        for(i = 0; i< sizeof(info.parent3); i++) {
-              info.parent3[i+buff_start] = buffer[i];
-        }
-    }
-
-    if (tmp_de->d_parent != NULL) {
-        tmp_de = tmp_de->d_parent;
-           bpf_probe_read(&buffer, 32, (void *) tmp_de->d_name.name);
-        for(i = 0; i< sizeof(info.parent4); i++) {
-              info.parent4[i+buff_start] = buffer[i];
-        }
-    }
-
-    info.inode = file->f_inode->i_ino;
-
-    bpf_get_current_comm(&info.comm, sizeof(info.comm));
-    task = (struct task_struct *)bpf_get_current_task(); 
-
-
-    info.name_len = de->d_name.len;
-    info.uid = uid;
-    if (is_read) {
-        info.type = 'R';
-    } else {
-        info.type = 'W';
-    }
-
-    struct val_t *valp, zero = {};
-    valp = fileops.lookup_or_init(&info, &zero);
-    info.optype = 12;
-    if (is_read) {
-        info.type = 'R';
-        info.optype = 1;
-        valp->reads++;
-        valp->rbytes += count;
-    } else {
-        info.type = 'W';
-        info.optype = 2;
-        valp->writes++;
-        valp->wbytes += count;
-    }
-
+    // unrolled loop to walk argv[] (MAXARG)
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++; // X
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++;
+    if (submit_arg(ctx, (void *)&__argv[i], &data) == 0) goto out; i++; // XX
+    // handle truncated argument list
+    char ellipsis[] = "...";
+    __submit_arg(ctx, (void *)ellipsis, &data);
+out:
     return 0;
 }
 
-int trace_write_entry(struct pt_regs *ctx, struct file *file,
-    char __user *buf, size_t count)
+
+int trace_inet_listen(struct pt_regs *ctx, struct socket *sock, int backlog)
 {
-    return do_entry(ctx, file, buf, count, 0);
-}
+	// cast types. Intermediate cast not needed, kept for readability
+	struct sock *sk = sock->sk;
+	struct inet_sock *inet = inet_sk(sk);
 
-int trace_read_entry(struct pt_regs *ctx, struct file *file,
-    char __user *buf, size_t count)
-{
-    return do_entry(ctx, file, buf, count, 1);
-}*/
+	// Built event for userland
+    struct data_t data = {};
+	
+	data.mode = 'L'; // Listen
+	bpf_get_current_comm(data.comm, TASK_COMM_LEN);
 
+	u32 uid = (u32) bpf_get_current_uid_gid();
+	u32 gid = bpf_get_current_uid_gid() >> 32;
 
-BPF_HASH(currsock, u32, struct sock *);
-/*
-int kprobe__tcp_v4_connect(struct pt_regs *ctx, struct sock *sk)
-{
-        u32 pid = bpf_get_current_pid_tgid();
+	// Get socket IP family
+	u16 family = sk->__sk_common.skc_family;
+	data.proto = family << 16 | SOCK_STREAM;
 
-        // stash the sock ptr for lookup on return
-        currsock.update(&pid, &sk);
+	// Get PID
+	data.pid = bpf_get_current_pid_tgid() >>32;
+	data.uid = uid;
 
+    if (GID_FILTER)
         return 0;
+    if (UID_FILTER)
+        return 0;
+	
+	//##FILTER_PID##
+
+	// Get port
+	bpf_probe_read(&data.lport, sizeof(u16), &(inet->inet_sport));
+	data.lport = ntohs(data.lport);
+
+	// Get network namespace id, if kernel supports it
+#ifdef CONFIG_NET_NS
+	//evt.netns = sk->__sk_common.skc_net.net->ns.inum;
+#else
+	//evt.netns = 0;
+#endif
+
+	//##FILTER_NETNS##
+
+	// Get IP
+	if (family == AF_INET) {
+		bpf_probe_read(data.laddr, sizeof(u32), &(inet->inet_rcv_saddr));
+		data.laddr[0] = be32_to_cpu(data.laddr[0]);
+	} else if (family == AF_INET6) {
+		bpf_probe_read(data.laddr, sizeof(data.laddr),
+						sk->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr32);
+		data.laddr[0] = be64_to_cpu(data.laddr[0]);
+		data.laddr[1] = be64_to_cpu(data.laddr[1]);
+	}
+
+	// Send event to userland
+	events.perf_submit(ctx, &data, sizeof(data));
+
+	return 0;
 };
-
-int kretprobe__tcp_v4_connect(struct pt_regs *ctx)
-{
-        int ret = PT_REGS_RC(ctx);
-        u32 pid = bpf_get_current_pid_tgid();
-
-        struct sock **skpp;
-        skpp = currsock.lookup(&pid);
-        if (skpp == 0) {
-                return 0;       // missed entry
-        }
-
-        if (ret != 0) {
-                // failed to send SYNC packet, may not have populated
-                // socket __sk_common.{skc_rcv_saddr, ...}
-                currsock.delete(&pid);
-                return 0;
-        }
-
-        // pull in details
-        struct sock *skp = *skpp;
-        u32 saddr = 0, daddr = 0;
-        u16 dport = 0;
-        bpf_probe_read(&saddr, sizeof(saddr), &skp->__sk_common.skc_rcv_saddr);
-        bpf_probe_read(&daddr, sizeof(daddr), &skp->__sk_common.skc_daddr);
-        bpf_probe_read(&dport, sizeof(dport), &skp->__sk_common.skc_dport);
-
-        // output
-        bpf_trace_printk("trace_tcp4connect %x %x %d\\n", saddr, daddr, ntohs(dport));
-
-        currsock.delete(&pid);
-
-        return 0;
-}
-*/
 

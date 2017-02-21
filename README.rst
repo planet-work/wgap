@@ -34,10 +34,10 @@ Events
 
 The probes listens events from uid > 1000 (normal users):
 
-* file write operations : ``__vfs_write``
+* file write operations : ``__sys_open``
 * TCP connect (80, 443, 25)  : ``__tcp_v4_connect``
 * UDP packets sent (Dos) :
-* Server socket listen
+* Server socket listen: ``__inet_listen``
 * Command execution : ``__sys_execve``
 
 

@@ -16,16 +16,17 @@ from ..core import config
 from bcc import BPF
 import fnmatch
 import json
-# import pprint
+import pprint
 # import yaml
 import http.client
-from socket import gethostname
+import socket
+import netaddr
 
 UID_CACHE = {}
 
 TASK_COMM_LEN = 16    # linux/sched.h
 NAME_MAX = 255        # linux/limits.h
-HOSTNAME = gethostname()
+HOSTNAME = socket.gethostname()
 
 
 class Event:
@@ -42,6 +43,7 @@ class Event:
         d['progname'] = ''
         d['event'] = ''
         d['path'] = ''
+        d['protocol'] = ''
         d['local_port'] = ''
         d['remote_port'] = ''
         d['remote_ip'] = ''
@@ -59,12 +61,16 @@ def get_username(uid):
 
 
 def send_output(data):
+    if True:
+        pprint.pprint(data.__dict__)
+
     if 'console' in config.output:
-        print("%s %s %s %s" % (data.event,
-                               data.username,
-                               data.filename,
-                               data.progname))
-        # pprint.pprint(data.__dict__)
+        print("%s %s %s %s[%i]" % (
+                            data.event,
+                            data.username,
+                            data.filename,
+                            data.progname,
+                            data.pid))
 
     if 'collector' in config.output:
         params = json.dumps(data.__dict__)
@@ -122,9 +128,16 @@ class Data(ct.Structure):
         ("ret", ct.c_int),
         ("pid", ct.c_uint),
         ("uid", ct.c_uint),
+        ("gid", ct.c_uint),
         ("mode", ct.c_char),
         ("comm", ct.c_char * TASK_COMM_LEN),
-        ("fname", ct.c_char * NAME_MAX),
+        ("data1", ct.c_char * NAME_MAX),
+        ("proto", ct.c_ulonglong),
+        ("laddr", ct.c_ulonglong * 2),
+        ("raddr", ct.c_ulonglong * 2),
+        ("lport", ct.c_ulonglong),
+        ("rport", ct.c_ulonglong),
+
     ]
 
 
@@ -136,41 +149,74 @@ def process_event(cpu, data, size):
     event = ct.cast(data, ct.POINTER(Data)).contents
     global initial_ts
 
-    # if event.ret >= 0:
-    #     fd_s = event.ret
-    #     err = 0
-    # else:
-    #     fd_s = -1
-    #     err = - event.ret
-
     if not initial_ts:
         initial_ts = event.ts
 
     evt = Event()
-    evt.filename = event.fname.decode('utf-8')
-    if config.filter.include_files:
-        keep = False
-        for ext in config.filter.include_files:
-            if fnmatch.fnmatch(evt.filename, ext):
-                keep = True
-        if not keep:
-            return None
 
-    evt.uid = event.uid
-    # evt.gid = event.gid
-    evt.pid = event.pid
-    evt.username = get_username(event.uid)
     mode = event.mode.decode('ascii')
     if mode == 'R':
         evt.event = 'file_read'
     elif mode == 'W':
         evt.event = 'file_write'
+    elif mode == 'E':
+        evt.event = 'execve'
+    elif mode == 'L':
+        evt.event = 'inet_listen'
+    elif mode == 'C':
+        evt.event = 'tcp_connect'
+    elif mode == 'U':
+        evt.event = 'udp'
 
-    for excl in config.filter.exclude_files:
-        if fnmatch.fnmatch(evt.filename, excl):
-            return None
-
+    evt.uid = event.uid
+    # evt.gid = event.gid
+    evt.pid = event.pid
     evt.progname = event.comm.decode('utf-8')
+    evt.username = get_username(event.uid)
+
+    if mode in ['R', 'W']:
+        evt.filename = event.data1.decode('utf-8')
+        if config.filter.include_files:
+            keep = False
+            for ext in config.filter.include_files:
+                if fnmatch.fnmatch(evt.filename, ext):
+                    keep = True
+            if not keep:
+                return None
+
+        for excl in config.filter.exclude_files:
+            if fnmatch.fnmatch(evt.filename, excl):
+                return None
+    elif mode == 'E':
+        evt.filename = event.data1.decode('utf-8')
+    elif mode == 'L':
+        proto_family = event.proto & 0xff
+        proto_type = event.proto >> 16 & 0xff
+
+        if proto_family == socket.SOCK_STREAM:
+            protocol = "TCP"
+        elif proto_family == socket.SOCK_DGRAM:
+            protocol = "UDP"
+        else:
+            protocol = "UNK"
+        laddress = ""
+        raddress = ""
+        if proto_type == socket.AF_INET:
+            protocol += "v4"
+            laddress = netaddr.IPAddress(event.laddr[0])
+            raddress = netaddr.IPAddress(event.raddr[0])
+        elif proto_type == socket.AF_INET6:
+            laddress = netaddr.IPAddress(event.laddr[0] << 64 | event.laddr[1],
+                                         version=6)
+            raddress = netaddr.IPAddress(event.raddr[0] << 64 | event.raddr[1],
+                                         version=6)
+            protocol += "v6"
+        evt.local_port = event.lport
+        evt.repote_port = event.rport
+        evt.local_ip = '%s' % laddress
+        evt.remote_ip = '%s' % raddress
+        evt.protocol = protocol
+
     send_output(evt)
 
 
@@ -207,13 +253,12 @@ def main(**kwargs):
         logger.debug("Attaching __sys_open")
         b.attach_kprobe(event="sys_open", fn_name="trace_sys_open_entry")
         b.attach_kretprobe(event="sys_open", fn_name="trace_sys_open_return")
-    #
-    # if 'file_read' in config.input:
-    #    logger.debug("Attaching __vfs_read")
-    #     b.attach_kprobe(event="__vfs_read", fn_name="trace_read_entry")
-    # if 'file_write' in config.input:
-    #     logger.debug("Attaching __vfs_write")
-    #     b.attach_kprobe(event="__vfs_write", fn_name="trace_write_entry")
+    if 'execve' in config.input:
+        logger.debug("Attaching __sys_execve")
+        b.attach_kprobe(event="sys_execve", fn_name="trace_sys_execve")
+    if 'inet_listen' in config.input:
+        logger.debug("Attaching __inet_listen")
+        b.attach_kprobe(event="inet_listen", fn_name="trace_inet_listen")
 
     # Main loop
     logger.debug("Starting main loop every %i seconds" % config.poll_interval)
