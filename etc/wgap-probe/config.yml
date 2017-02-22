@@ -10,7 +10,7 @@ poll_interval: 1
 
 input:
     - file_write
-    - tcp_connect
+    - tcp_connectXXXX
     - inet_listen
     - execve
 
@@ -43,6 +43,13 @@ filter:
         - "*/ecrire/data/meta_cache.php"
     exclude_ports:
         - 3306
+    exclude_progs:
+        - /bin/sh
+        - /usr/sbin/sendmail
+        - nullmailer-inject
+        - /etc/apache2/conf/sendmail-secure
+        - /usr/sbin//nullmailer-queue
+        - /bin/ls
    
 callbacks:
     - pms_php:

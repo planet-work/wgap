@@ -198,6 +198,8 @@ def process_event(cpu, data, size):
                 return None
     elif mode == 'E':
         evt.filename = event.data1.decode('utf-8')
+        if evt.filename == ' ' or evt.filename in config.filter.exclude_progs:
+            return None
     elif mode in ['L', 'C']:
         proto_family = event.proto & 0xff
         proto_type = event.proto >> 16 & 0xff
