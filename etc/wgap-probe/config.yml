@@ -41,6 +41,12 @@ filter:
         - "*/logs/error.php"
         - "*/plugins/wordfence/tmp/configCache.php"
         - "*/ecrire/data/meta_cache.php"
+        - "*/backwpup-working.php"
+        - "*/wp-content/cache/object/*"
+        - "*/wp-content/plugins/si-captcha-for-wordpress/captcha/cache/*"
+        - "*/wp-content/uploads/sucuri/sucuri-*failedlogins.php"
+        - "*/assets/cache/*pageCache.php"
+        - "*.cache.php"
     exclude_ports:
         - 3306
     exclude_progs:
