@@ -1,3 +1,10 @@
+wgap (1.0.1+deb8u2) UNRELEASED; urgency=medium
+
+  * New event format
+  * Heka output (protobuf)
+
+ -- Frédéric VANNIÈRE <f.vanniere@planet-work.com>  Wed, 05 Apr 2017 14:47:14 +0200
+
 wgap (1.0.0+deb8u1) unstable; urgency=low
 
   * Initial release

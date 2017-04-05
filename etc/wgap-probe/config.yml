@@ -3,14 +3,14 @@
 # Installs kernel headers with apt : apt-get install -y linux-headers-`uname -r` linux-image-`uname -r`
 autoinstall_headers: True
 
-loglevel: DEBUG
+loglevel: WARNING
 
 # polling interval (seconds)
 poll_interval: 1
 
 input:
     - file_write
-    - tcp_connectXXXX
+    - tcp_connect
     - inet_listen
     - execve
 
@@ -46,9 +46,11 @@ filter:
         - "*/wp-content/plugins/si-captcha-for-wordpress/captcha/cache/*"
         - "*/wp-content/uploads/sucuri/sucuri-*failedlogins.php"
         - "*/assets/cache/*pageCache.php"
+        - "*/wp-content/uploads/fusion-builder-avada-pages/*"
         - "*.cache.php"
     exclude_ports:
         - 3306
+        - 6379
     exclude_progs:
         - /bin/sh
         - /usr/sbin/sendmail
@@ -56,6 +58,8 @@ filter:
         - /etc/apache2/conf/sendmail-secure
         - /usr/sbin//nullmailer-queue
         - /bin/ls
+        - /usr/bin/which
+        - /usr/bin/convert
    
 callbacks:
     - pms_php:
@@ -63,10 +67,12 @@ callbacks:
         - function: check_pms
 
 output:
+    heka:
+        address: 10.3.1.250:6201
     collector:
         address: 10.3.1.251:6201
         format: json
-    console:
-        format: text
+#    console:
+#        format: text
 
 

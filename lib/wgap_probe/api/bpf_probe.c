@@ -78,7 +78,7 @@ int trace_sys_open_entry(struct pt_regs *ctx, const char __user *filename, int f
 
     if (bpf_get_current_comm(&val.comm, sizeof(val.comm)) == 0) {
         val.id = id;
-        val.ts_us = bpf_ktime_get_ns();
+        val.ts_us = bpf_ktime_get_ns() / 1000;
         val.data1 = filename;
         val.uid = uid;
 
@@ -94,7 +94,7 @@ int trace_sys_open_return(struct pt_regs *ctx)
     struct val_t *valp;
     struct data_t data = {};
 
-    u64 tsp = bpf_ktime_get_ns();
+    u64 tsp = bpf_ktime_get_ns() / 1000;
 
     valp = infotmp.lookup(&id);
     if (valp == 0) {

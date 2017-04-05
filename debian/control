@@ -8,7 +8,7 @@ Homepage: https://www.planet-work.com
 
 Package: wgap-probe
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, ${python3:Depends}, python-bcc, python3-yaml, python3-pkg-resources, python3-colorlog, python3-netaddr
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${python3:Depends}, python-bcc, python3-yaml, python3-pkg-resources, python3-colorlog, python3-netaddr, python3-protobuf
 Description: Webserver suspicious activity probe
 
 Package: wgap-collector

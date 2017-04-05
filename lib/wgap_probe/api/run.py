@@ -10,46 +10,57 @@ import platform
 from time import gmtime, mktime
 from subprocess import Popen, PIPE
 # from time import sleep
+import datetime
 import ctypes as ct
 from ..core import logger
 from ..core import config
 from bcc import BPF
 import fnmatch
 import json
-import pprint
+# import pprint
 # import yaml
 import http.client
 import socket
 import netaddr
 
 UID_CACHE = {}
-
 TASK_COMM_LEN = 16    # linux/sched.h
 NAME_MAX = 255        # linux/limits.h
 HOSTNAME = socket.gethostname()
+TENANT_ID = ''
+TENANT = ''
+
+try:
+    TENANT = os.getenv('TENANT')
+except KeyError:
+    TENANT = ''
+
+has_heka = False
+try:
+    from ..heka import Message, INFO, HekaConnection
+    has_heka = True
+except ImportError:
+    logger.error("Cannot import heka python lib")
+    pass
+
+heka_conn = None
 
 
 class Event:
     def __init__(self):
         d = self.__dict__
+        d['event'] = ''
         d['hostname'] = HOSTNAME
+        d['tenant'] = TENANT
         d['timestamp'] = mktime(gmtime())
         d['pid'] = 0
         d['uid'] = 0
-        d['gid'] = 0
-        d['username'] = ''
-        d['groupname'] = ''
-        d['filename'] = ''
-        d['progname'] = ''
-        d['event'] = ''
-        d['path'] = ''
-        d['protocol'] = ''
-        d['local_port'] = ''
-        d['remote_port'] = ''
-        d['remote_ip'] = ''
+        d['user'] = ''
+        d['message'] = ''
+        d['fields'] = {}
 
 
-def get_username(uid):
+def get_user(uid):
     if uid in UID_CACHE:
         return UID_CACHE[uid]
     try:
@@ -60,19 +71,52 @@ def get_username(uid):
     return UID_CACHE[uid]
 
 
+class DateTimeEncoder(json.JSONEncoder):
+    """JSON serializer for objects not serializable by default json code"""
+    def default(self, o):
+        if isinstance(o, datetime.datetime):
+            return o.isoformat()
+        return json.JSONEncoder.default(self, o)
+
+
 def send_output(data):
-    if True:
-        pprint.pprint(data.__dict__)
-
     if 'console' in config.output:
-        print("%s %s %s %s[%i]" % (data.event,
-                                   data.username,
-                                   data.filename,
-                                   data.progname,
-                                   data.pid))
+        print('%s %s' % (data.timestamp.isoformat(), data.message))
 
-    if 'collector' in config.output:
-        params = json.dumps(data.__dict__)
+    if 'heka' in config.output and has_heka:
+        address = config.output.heka.address.split(':')[0]
+        port = int(config.output.heka.address.split(':')[1])
+        # if not heka_conn:
+        heka_conn = HekaConnection('%s:%i' % (address, port))
+
+        fields = {
+            'message': data.message,
+            'event': data.event,
+            'tenant': data.tenant,
+            'appname': data.appname,
+            'user': data.user,
+            'uid': data.uid,
+            'pid': data.pid,
+            'timestamp': data.timestamp.isoformat()       # ISO 8601 UTC
+        }
+        for f in data.fields.keys():
+            fields[f] = data.fields[f]
+
+        ts_us = float(data.timestamp.strftime('%s.%f'))
+        ts_ns = int(ts_us*1e9)
+        msg = Message(
+            logger='wgap',
+            type='probe_event',
+            hostname=data.hostname,
+            timestamp=ts_ns,
+            severity=INFO,
+            fields=fields
+        )
+        heka_conn.send_message(msg)
+
+    if 'collector' in config.output and data.event == 'file_write':
+        data.timestamp = data.timestamp.isoformat()
+        params = json.dumps(data.__dict__, cls=DateTimeEncoder)
         headers = {"Content-type": "application/json",
                    "Accept": "application/json"}
         address = config.output.collector.address.split(':')[0]
@@ -179,27 +223,37 @@ def process_event(cpu, data, size):
     evt.uid = event.uid
     # evt.gid = event.gid
     evt.pid = event.pid
-    evt.progname = event.comm.decode('utf-8')
-    evt.username = get_username(event.uid)
-    evt.timestamp = event.ts_us
+    evt.appname = event.comm.decode('utf-8')
+    evt.user = get_user(event.uid)
+    # evt.timestamp = time.mktime(time.gmtime())
+    evt.timestamp = datetime.datetime.now(datetime.timezone.utc)
+
+    evt.message = '%s@%s %s[%i] %s: ' % (evt.user,
+                                         evt.tenant,
+                                         evt.appname,
+                                         evt.pid,
+                                         evt.event)
 
     if mode in ['R', 'W']:
-        evt.filename = event.data1.decode('utf-8')
+        evt.fields['filename'] = event.data1.decode('utf-8')
         if config.filter.include_files:
             keep = False
             for ext in config.filter.include_files:
-                if fnmatch.fnmatch(evt.filename, ext):
+                if fnmatch.fnmatch(evt.fields['filename'], ext):
                     keep = True
             if not keep:
                 return None
 
         for excl in config.filter.exclude_files:
-            if fnmatch.fnmatch(evt.filename, excl):
+            if fnmatch.fnmatch(evt.fields['filename'], excl):
                 return None
+        evt.message += evt.fields['filename']
     elif mode == 'E':
-        evt.filename = event.data1.decode('utf-8')
-        if evt.filename == ' ' or evt.filename in config.filter.exclude_progs:
+        evt.fields['filename'] = event.data1.decode('utf-8')
+        if evt.fields['filename'] in [' ', ''] or evt.fields['filename'] in \
+                config.filter.exclude_progs:
             return None
+        evt.message += evt.fields['filename']
     elif mode in ['L', 'C']:
         proto_family = event.proto & 0xff
         proto_type = event.proto >> 16 & 0xff
@@ -222,11 +276,18 @@ def process_event(cpu, data, size):
             raddress = netaddr.IPAddress(event.raddr[0] << 64 | event.raddr[1],
                                          version=6)
             protocol += "v5"
-        evt.local_port = event.lport
-        evt.remote_port = event.rport
-        evt.local_ip = '%s' % laddress
-        evt.remote_ip = '%s' % raddress
-        evt.protocol = protocol
+        evt.fields['localPort'] = event.lport
+        evt.fields['remotePort'] = event.rport
+        evt.fields['localAddr'] = '%s' % laddress
+        evt.fields['remoteAddr'] = '%s' % raddress
+        evt.fields['protocol'] = protocol
+
+        evt.message += '[%s]:%i' % (evt.fields['localAddr'],
+                                    evt.fields['localPort'])
+        if mode == 'C':
+            evt.message += ' > [%s]:%i (%s)' % (evt.fields['remoteAddr'],
+                                                evt.fields['remotePort'],
+                                                evt.fields['protocol'])
 
     send_output(evt)
 
