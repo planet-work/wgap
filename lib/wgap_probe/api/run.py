@@ -10,6 +10,7 @@ import platform
 from time import gmtime, mktime
 from subprocess import Popen, PIPE
 # from time import sleep
+from struct import pack
 import datetime
 import ctypes as ct
 from ..core import logger
@@ -20,13 +21,14 @@ import json
 # import pprint
 # import yaml
 import http.client
-import socket
+from socket import SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6, inet_ntop, \
+    gethostname, ntohs
 import netaddr
 
 UID_CACHE = {}
 TASK_COMM_LEN = 16    # linux/sched.h
 NAME_MAX = 255        # linux/limits.h
-HOSTNAME = socket.gethostname()
+HOSTNAME = gethostname()
 TENANT_ID = ''
 TENANT = ''
 
@@ -157,7 +159,7 @@ def create_bpf_probe():
 
     if 'exclude_ports' in config.filter:
         dports = config.filter.exclude_ports
-        p_if = ' && '.join(['dport == %d' % socket.ntohs(dport)
+        p_if = ' && '.join(['dport == %d' % ntohs(dport)
                             for dport in dports])
         bpf_text = bpf_text.replace('PORT_FILTER', p_if)
     else:
@@ -255,22 +257,29 @@ def process_event(cpu, data, size):
             return None
         evt.message += evt.fields['filename']
     elif mode in ['L', 'C']:
+        print("PROTO: %i" % event.proto)
         proto_family = event.proto & 0xff
         proto_type = event.proto >> 16 & 0xff
+        # print("Proto: " + repr(event.proto))
+        # print("ProtoT=%i" % proto_type)
+        # print("ProtoF=%i" % proto_family)
+        # print("lAddr0: " + repr(event.laddr[0]))
+        # print("rAddr0: " + repr(event.raddr[0]))
 
-        if proto_family == socket.SOCK_STREAM:
+        if proto_family == SOCK_STREAM:
             protocol = "TCP"
-        elif proto_family == socket.SOCK_DGRAM:
+        elif proto_family == SOCK_DGRAM:
             protocol = "UDP"
         else:
             protocol = "UNK"
         laddress = ""
         raddress = ""
-        if proto_type == socket.AF_INET:
+        # TODO IPv6 support
+        if proto_type == AF_INET or True:
             protocol += "v4"
-            laddress = netaddr.IPAddress(event.laddr[0])
-            raddress = netaddr.IPAddress(event.raddr[0])
-        elif proto_type == socket.AF_INET6:
+            laddress = inet_ntop(AF_INET, pack("I", event.laddr[0]))
+            raddress = inet_ntop(AF_INET, pack("I", event.raddr[0]))
+        elif proto_type == AF_INET6:
             laddress = netaddr.IPAddress(event.laddr[0] << 64 | event.laddr[1],
                                          version=6)
             raddress = netaddr.IPAddress(event.raddr[0] << 64 | event.raddr[1],
