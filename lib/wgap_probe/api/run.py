@@ -10,7 +10,6 @@ import platform
 from time import gmtime, mktime
 from subprocess import Popen, PIPE
 # from time import sleep
-from struct import pack
 import datetime
 import ctypes as ct
 from ..core import logger
@@ -21,8 +20,8 @@ import json
 # import pprint
 # import yaml
 import http.client
-from socket import SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6, inet_ntop, \
-    gethostname, ntohs
+from socket import SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6, gethostname, \
+    ntohs
 import netaddr
 
 UID_CACHE = {}
@@ -46,6 +45,21 @@ except ImportError:
     pass
 
 heka_conn = None
+
+exclude_networks = []
+
+
+def init_filters():
+    if len(exclude_networks) == 0:
+        for ip in config.filter.exclude_ips:
+            net = netaddr.IPNetwork(ip)
+            # if '/' in ip:
+            #     net = netaddr.IPNetwork(ip)
+            # elif ':' in ip:
+            #     net = netaddr.IPNetwork(ip + '/128')
+            # else:
+            #     net = netaddr.IPNetwork(ip + '/32')
+            exclude_networks.append(net)
 
 
 class Event:
@@ -200,6 +214,7 @@ initial_ts = 0
 
 # process event
 def process_event(cpu, data, size):
+    init_filters()
     event = ct.cast(data, ct.POINTER(Data)).contents
     global initial_ts
 
@@ -257,14 +272,8 @@ def process_event(cpu, data, size):
             return None
         evt.message += evt.fields['filename']
     elif mode in ['L', 'C']:
-        print("PROTO: %i" % event.proto)
         proto_family = event.proto & 0xff
         proto_type = event.proto >> 16 & 0xff
-        # print("Proto: " + repr(event.proto))
-        # print("ProtoT=%i" % proto_type)
-        # print("ProtoF=%i" % proto_family)
-        # print("lAddr0: " + repr(event.laddr[0]))
-        # print("rAddr0: " + repr(event.raddr[0]))
 
         if proto_family == SOCK_STREAM:
             protocol = "TCP"
@@ -272,19 +281,21 @@ def process_event(cpu, data, size):
             protocol = "UDP"
         else:
             protocol = "UNK"
+
         laddress = ""
         raddress = ""
-        # TODO IPv6 support
-        if proto_type == AF_INET or True:
+
+        if proto_type == AF_INET:
             protocol += "v4"
-            laddress = inet_ntop(AF_INET, pack("I", event.laddr[0]))
-            raddress = inet_ntop(AF_INET, pack("I", event.raddr[0]))
+            laddress = netaddr.IPAddress(event.laddr[0], version=4)
+            raddress = netaddr.IPAddress(event.raddr[0], version=4)
         elif proto_type == AF_INET6:
-            laddress = netaddr.IPAddress(event.laddr[0] << 64 | event.laddr[1],
-                                         version=6)
-            raddress = netaddr.IPAddress(event.raddr[0] << 64 | event.raddr[1],
-                                         version=6)
-            protocol += "v5"
+            protocol += "v6"
+            lip = event.laddr[0] << 64 | event.laddr[1]
+            laddress = netaddr.IPAddress(lip, version=6)
+            rip = event.raddr[0] << 64 | event.raddr[1]
+            raddress = netaddr.IPAddress(rip, version=6)
+
         evt.fields['localPort'] = event.lport
         evt.fields['remotePort'] = event.rport
         evt.fields['localAddr'] = '%s' % laddress
@@ -293,7 +304,15 @@ def process_event(cpu, data, size):
 
         evt.message += '[%s]:%i' % (evt.fields['localAddr'],
                                     evt.fields['localPort'])
+
+        # Filter remote IP for connection
         if mode == 'C':
+            if raddress.is_private() or raddress.is_loopback() or \
+                    raddress.is_link_local():
+                return None
+            for n in exclude_networks:
+                if raddress in n:
+                    return None
             evt.message += ' > [%s]:%i (%s)' % (evt.fields['remoteAddr'],
                                                 evt.fields['remotePort'],
                                                 evt.fields['protocol'])

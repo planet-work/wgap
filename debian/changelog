@@ -1,11 +1,12 @@
-wgap (1.0.2+deb8u1) UNRELEASED; urgency=medium
+wgap (1.1.0+deb8u2) unstable; urgency=medium
 
   * New event format
   * Heka output (protobuf)
   * Fixes for IPv4 connections (no IPv6 yet)
-  * 
+  * IPv6 support for tcp_connect
+  * Network filtering for tcp_connect
 
- -- Frédéric VANNIÈRE <f.vanniere@planet-work.com>  Mon, 10 Apr 2017 15:25:52 +0200
+ -- Frédéric VANNIÈRE <f.vanniere@planet-work.com>  Tue, 11 Apr 2017 15:52:16 +0200
 
 wgap (1.0.0+deb8u1) unstable; urgency=low
 

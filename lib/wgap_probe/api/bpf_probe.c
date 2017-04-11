@@ -39,8 +39,8 @@ struct data_t {
     char comm[TASK_COMM_LEN]; 
     char data1[NAME_MAX]; 
 	u64 proto;
-	u64 laddr[2];
-	u64 raddr[2];
+	u64 laddr[2]; // IPv4: store in laddr[0] 
+	u64 raddr[2]; // IPv4: store in laddr[0] 
 	u64 lport;
 	u64 rport;
 	//char argv[ARGSIZE];
@@ -300,22 +300,37 @@ static int trace_connect_return(struct pt_regs *ctx, short ipver)
     bpf_get_current_comm(&data.comm, sizeof(data.comm));
     data.rport = ntohs(dport);
 
-	u16 family = &skp->__sk_common.skc_family;
-	data.proto = family << 16 | SOCK_STREAM;
+	u16 family = 0; //&skp->__sk_common.skc_family;
 
     if (ipver == 4) {
+		family = AF_INET;
         bpf_probe_read(&data.laddr[0], sizeof(u32),
             &skp->__sk_common.skc_rcv_saddr);
         bpf_probe_read(&data.raddr[0], sizeof(u32),
             &skp->__sk_common.skc_daddr);
+		data.laddr[0] = be32_to_cpu(data.laddr[0]);
+		data.raddr[0] = be32_to_cpu(data.raddr[0]);
     } else {
+		family = AF_INET6;
+
+		bpf_probe_read(data.laddr, sizeof(data.laddr),
+						&skp->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr32);
+		bpf_probe_read(data.raddr, sizeof(data.raddr),
+						&skp->__sk_common.skc_v6_daddr.in6_u.u6_addr32);
+		data.laddr[0] = be64_to_cpu(data.laddr[0]);
+		data.laddr[1] = be64_to_cpu(data.laddr[1]);
+		data.raddr[0] = be64_to_cpu(data.raddr[0]);
+		data.raddr[1] = be64_to_cpu(data.raddr[1]);
+        //data.laddr[0] = be64_to_cpu(data.laddr[0]);
+		//data.laddr[1] = be64_to_cpu(data.laddr[1]);
 		/*
         bpf_probe_read(&data6.saddr, sizeof(data6.saddr),
             &skp->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr32);
         bpf_probe_read(&data6.daddr, sizeof(data6.daddr),
             &skp->__sk_common.skc_v6_daddr.in6_u.u6_addr32);
-			*/
+		*/
     }
+	data.proto = family << 16 | SOCK_STREAM;	
 
 	events.perf_submit(ctx, &data, sizeof(data));
     currsock.delete(&pid);
