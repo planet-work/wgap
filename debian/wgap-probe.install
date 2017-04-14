@@ -1,4 +1,5 @@
 etc/wgap-probe/*
+etc/wgap-probe/conf.d
 usr/bin/wgap-probe
 usr/lib/python*/dist-packages/wgap_probe*
 usr/lib/python*/dist-packages/wgap_probe/api/bpf_probe.c
