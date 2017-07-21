@@ -48,6 +48,10 @@ filter:
         - "*/assets/cache/*pageCache.php"
         - "*/wp-content/uploads/fusion-builder-avada-pages/*"
         - "*.cache.php"
+        - "*/cache/Gantry/*"
+        - "*/sucuri/sucuri-auditqueue.php"
+        - "*/sucuri/sucuri-settings.php"
+        - "*/cache/production/data_global.php"
     exclude_ports:
         - 3306
         - 6379
