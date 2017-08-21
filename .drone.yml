@@ -1,7 +1,19 @@
-clone:
-      tags: true
+pipeline:
 
-build:
+  pkg-suffix:
+    image: dock.pw.fr/pw/debpkg:${DEBIAN_VERSION}
+    commands:
+        - dch -l ~deb`lsb_release -r -s | cut -d'.' -f1`u   `git rev-parse HEAD | cut -c1-8`
+    when:
+      event: tag
+
+  pkg-suffix-testing:
+    image: dock.pw.fr/pw/debpkg:${DEBIAN_VERSION}
+    commands:
+        - dch -l ~build`date +"%y%m%d%H%M"`deb`lsb_release -r -s | cut -d'.' -f1`u   `git rev-parse HEAD | cut -c1-8`
+    when:
+      event: push
+
   pretest:
     image: dock.pw.fr/pw/python:$$PYTHON_VERSION
     commands:
@@ -9,12 +21,14 @@ build:
       - pip install -q flake8 coverage coverage-badge
       - echo "****** Tests de code *****"
       - flake8 setup.py lib/wgap_probe
+
   bundle:
     image: dock.pw.fr/pw/debpkg:$$DEBIAN_VERSION
     commands:
       - apt-get install -y dh-systemd python3-setuptools python3-yaml python3-colorlog
       - dpkg-buildpackage -b
       - fakeroot debian/rules clean
+
   test:
       image: dock.pw.fr/pw/wgap-probe:jessie
     privileged: true
@@ -33,20 +47,44 @@ build:
       - echo "*** TEST DESACTIVES ***** /usr/bin/wgap-probe test"
       - /usr/bin/wgap-probe test
 
-publish:
-  sftp:
+  pkg-testing:
+    image: appleboy/drone-scp
     host: pippin.planet-work.net
     username: pkg
-    files:
-      - ../*.deb
-    destination_path: incoming/wgap/$$DEBIAN_VERSION
+    source: ../*.deb
+    target: incoming-testing/wgap/${DEBIAN_VERSION}
+    secrets: [ PLUGIN_KEY ]
     when:
-      event: tag
-  ssh:
+      event: push
+
+  aptly-testing:
+    image: appleboy/drone-ssh
     host: pippin.planet-work.net
     user: pkg
-    commands:
-      - aptly repo add debian-$$DEBIAN_VERSION incoming/wgap/$$DEBIAN_VERSION && aptly publish update $$DEBIAN_VERSION debian 
+    script:
+      - aptly repo remove debian-${DEBIAN_VERSION}-testing `aptly repo search debian-${DEBIAN_VERSION}-testing 'Name (~ wgap.*)' | xargs` || true
+      - aptly repo add debian-${DEBIAN_VERSION}-testing incoming-testing/wgap/${DEBIAN_VERSION} && aptly publish update ${DEBIAN_VERSION}-testing debian 
+    secrets: [ PLUGIN_KEY ]
+    when:
+      event: push
+
+  pkg:
+    image: appleboy/drone-scp
+    host: pippin.planet-work.net
+    username: pkg
+    source: ../*.deb
+    target: incoming/wgap/${DEBIAN_VERSION}
+    secrets: [ PLUGIN_KEY ]
+    when:
+      event: tag
+
+  aptly:
+    image: appleboy/drone-ssh
+    host: pippin.planet-work.net
+    user: pkg
+    script:
+      - aptly repo add debian-${DEBIAN_VERSION} incoming/wgap/${DEBIAN_VERSION} && aptly publish update ${DEBIAN_VERSION} debian 
+    secrets: [ PLUGIN_KEY ]
     when:
       event: tag
 

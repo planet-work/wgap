@@ -167,10 +167,10 @@ whitelist = [
   'gravityforms/includes/addon/class-gf-results.php',
   'w3-total-cache/inc/functions/multisite.php',
   '/ezpublish/cache/',
-  'administrator/components/com_securitycheckpro/scans/',                        
-  'custom-fields/typography/googlefonts-array.php',                              
-  'wp-content/uploads/sucuri/sucuri-sitecheck.php',                              
-  'wp-content/plugins/akeebabackupcore/app/restore.php',  
+  'administrator/components/com_securitycheckpro/scans/',
+  'custom-fields/typography/googlefonts-array.php',
+  'wp-content/uploads/sucuri/sucuri-sitecheck.php',
+  'wp-content/plugins/akeebabackupcore/app/restore.php',
 ]
 
 debug = True
