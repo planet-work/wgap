@@ -31,7 +31,7 @@ pipeline:
 
   test:
     image: dock.pw.fr/pw/wgap-probe:jessie
-    #privileged: true
+    privileged: true
     commands:
       - echo "****** Tests fonctionnels *****"
       - uname -a 
