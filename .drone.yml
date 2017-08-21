@@ -14,8 +14,8 @@ pipeline:
     when:
       event: push
 
-  pretest:
-    image: dock.pw.fr/pw/python:$$PYTHON_VERSION
+  test:
+    image: dock.pw.fr/pw/python:${PYTHON_VERSION}
     commands:
       - pip install -q -e . 
       - pip install -q flake8 coverage coverage-badge
@@ -23,29 +23,29 @@ pipeline:
       - flake8 setup.py lib/wgap_probe
 
   bundle:
-    image: dock.pw.fr/pw/debpkg:$$DEBIAN_VERSION
+    image: dock.pw.fr/pw/debpkg:${DEBIAN_VERSION}
     commands:
       - apt-get install -y dh-systemd python3-setuptools python3-yaml python3-colorlog
       - dpkg-buildpackage -b
       - fakeroot debian/rules clean
 
-#  test:
-#    image: dock.pw.fr/pw/wgap-probe:jessie
-#    privileged: true
-#    commands:
-#      - echo "****** Tests fonctionnels *****"
-#      - uname -a 
-#      - apt-get update >/dev/null
-#      - apt-get install python3-yaml python3-pkg-resources python-bcc kernel-common python3-colorlog python3-netaddr init-system-helpers
-#      - mv -f /etc/kernel-img.conf.ucf-new /etc/kernel-img.conf
-#        #      - apt-get install -o Dpkg::Options::="--force-confnew" -y linux-headers-`uname -r` linux-image-`uname -r`
-#      - dpkg -i ../*deb
-#      - dpkg -c ../wgap-probe*deb
-#      - sleep 2
-#      - mount -t debugfs debugfs /sys/kernel/debug
-#      - mount -t tracefs tracefs /sys/kernel/debug/tracing
-#      - echo "*** TEST DESACTIVES ***** /usr/bin/wgap-probe test"
-#      - /usr/bin/wgap-probe test
+  test:
+    image: dock.pw.fr/pw/wgap-probe:jessie
+    privileged: true
+    commands:
+      - echo "****** Tests fonctionnels *****"
+      - uname -a 
+      - apt-get update >/dev/null
+      - apt-get install python3-yaml python3-pkg-resources python-bcc kernel-common python3-colorlog python3-netaddr init-system-helpers
+      - mv -f /etc/kernel-img.conf.ucf-new /etc/kernel-img.conf
+        #      - apt-get install -o Dpkg::Options::="--force-confnew" -y linux-headers-`uname -r` linux-image-`uname -r`
+      - dpkg -i ../*deb
+      - dpkg -c ../wgap-probe*deb
+      - sleep 2
+      - mount -t debugfs debugfs /sys/kernel/debug
+      - mount -t tracefs tracefs /sys/kernel/debug/tracing
+      - echo "*** TEST DESACTIVES ***** /usr/bin/wgap-probe test"
+      - /usr/bin/wgap-probe test
 
   pkg-testing:
     image: appleboy/drone-scp
