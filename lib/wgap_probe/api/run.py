@@ -23,6 +23,7 @@ import http.client
 from socket import SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6, gethostname, \
     ntohs
 import netaddr
+from .pms import is_hacked
 
 UID_CACHE = {}
 TASK_COMM_LEN = 16    # linux/sched.h
@@ -265,6 +266,15 @@ def process_event(cpu, data, size):
             if fnmatch.fnmatch(evt.fields['filename'], excl):
                 return None
         evt.message += evt.fields['filename']
+        if mode == 'W' and os.path.exists(evt.fields['filename']):
+            pms_res = is_hacked(evt.fields['filename'])
+            evt.scan = pms_res
+            if evt.scan['score'] < 5:
+                return None
+            logger.error("File: %s (score: %i)" % (evt.fields['filename'], evt.scan['score'] ))
+        elif mode == "W":
+            logger.error("File: %s not readable" % evt.fields['filename'] )
+            
     elif mode == 'E':
         evt.fields['filename'] = event.data1.decode('utf-8')
         if evt.fields['filename'] in [' ', ''] or evt.fields['filename'] in \
