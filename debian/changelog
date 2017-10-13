@@ -1,3 +1,9 @@
+wgap (1.1.0+deb9u1) UNRELEASED; urgency=medium
+
+  * Debian Stretch version 
+
+ -- Frédéric VANNIÈRE <f.vanniere@planet-work.com>  Fri, 13 Oct 2017 16:56:36 +0200
+
 wgap (1.1.0+deb8u2) unstable; urgency=medium
 
   * New event format

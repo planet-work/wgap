@@ -30,7 +30,7 @@ pipeline:
       - fakeroot debian/rules clean
 
   test:
-    image: dock.pw.fr/pw/wgap-probe:jessie
+    image: dock.pw.fr/pw/wgap-probe:stretch
     privileged: true
     commands:
       - echo "****** Tests fonctionnels *****"
@@ -90,6 +90,6 @@ pipeline:
 
 matrix:
   PYTHON_VERSION:
-    - 3.4
+    - 3.5
   DEBIAN_VERSION:
-    - jessie
+    - stretch
